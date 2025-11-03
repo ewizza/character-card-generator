@@ -1,0 +1,600 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>SillyTavern Character Generator</title>
+        <link rel="icon" type="image/png" href="favicon.png" />
+        <link rel="stylesheet" href="src/styles/main.css" />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link
+            href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap"
+            rel="stylesheet"
+        />
+    </head>
+    <body>
+        <div class="container">
+            <header class="header">
+                <h1 class="title">🎭 SillyTavern Character Generator</h1>
+                <p class="subtitle">
+                    Create SillyTavern characters cards with AI
+                </p>
+            </header>
+
+            <main class="main">
+                <section class="input-section">
+                    <div class="form-group">
+                        <label for="character-concept" class="label"
+                            >Character Concept</label
+                        >
+                        <textarea
+                            id="character-concept"
+                            class="textarea"
+                            placeholder="Describe your character concept... (e.g., 'A stoic medieval blacksmith with a secret artistic passion')"
+                            rows="4"
+                        ></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="character-name" class="label"
+                            >Character Name (optional)</label
+                        >
+                        <input
+                            type="text"
+                            id="character-name"
+                            class="input"
+                            placeholder="Leave empty for AI-generated name"
+                        />
+                    </div>
+
+                    <!-- API Settings Collapsible -->
+                    <details
+                        class="api-settings-panel"
+                        style="margin-bottom: 1rem"
+                    >
+                        <summary
+                            style="
+                                cursor: pointer;
+                                padding: 0.75rem;
+                                background: var(--bg-secondary);
+                                border-radius: var(--radius);
+                                font-weight: 600;
+                                user-select: none;
+                            "
+                        >
+                            ⚙️ API Settings
+                        </summary>
+                        <div
+                            style="
+                                padding: 1rem;
+                                background: var(--bg-secondary);
+                                border-radius: var(--radius);
+                                margin-top: 0.5rem;
+                            "
+                        >
+                            <div class="form-group">
+                                <label for="text-api-base" class="label"
+                                    >Text API Base URL</label
+                                >
+                                <input
+                                    type="text"
+                                    id="text-api-base"
+                                    class="input"
+                                    placeholder="http://localhost:3001 (proxy server)"
+                                    required
+                                />
+                            </div>
+
+                            <div class="form-group">
+                                <label for="text-api-key" class="label"
+                                    >Text API Key</label
+                                >
+                                <input
+                                    type="password"
+                                    id="text-api-key"
+                                    class="input"
+                                    placeholder="Your API key (required)"
+                                    required
+                                />
+                            </div>
+
+                            <div class="form-group">
+                                <label for="text-model" class="label"
+                                    >Text Model</label
+                                >
+                                <input
+                                    type="text"
+                                    id="text-model"
+                                    class="input"
+                                    placeholder="e.g., glm-4.6"
+                                    required
+                                />
+                            </div>
+
+                            <div class="form-group">
+                                <label for="image-api-base" class="label"
+                                    >Image API Base URL (optional)</label
+                                >
+                                <input
+                                    type="text"
+                                    id="image-api-base"
+                                    class="input"
+                                    placeholder="http://localhost:3001 (optional)"
+                                />
+                            </div>
+
+                            <div class="form-group">
+                                <label for="image-api-key" class="label"
+                                    >Image API Key (optional)</label
+                                >
+                                <input
+                                    type="password"
+                                    id="image-api-key"
+                                    class="input"
+                                    placeholder="Your ImageRouter API key (optional)"
+                                />
+                            </div>
+
+                            <div class="form-group">
+                                <label for="image-model" class="label"
+                                    >Image Model (optional)</label
+                                >
+                                <input
+                                    type="text"
+                                    id="image-model"
+                                    class="input"
+                                    placeholder="e.g., bytedance/seedream-4 (optional)"
+                                />
+                            </div>
+
+                            <div class="form-group">
+                                <label for="image-size" class="label"
+                                    >Image Size (optional)</label
+                                >
+                                <input
+                                    type="text"
+                                    id="image-size"
+                                    class="input"
+                                    placeholder="e.g., 1024x1024, 512x512 (optional)"
+                                />
+                            </div>
+                        </div>
+                    </details>
+
+                    <div class="generation-buttons">
+                        <button
+                            id="generate-btn"
+                            class="btn-primary"
+                            style="flex: 1; min-width: 200px"
+                        >
+                            <span class="btn-text">Generate Character</span>
+                            <span class="btn-loading" style="display: none"
+                                >Generating...</span
+                            >
+                        </button>
+                        <button
+                            id="stop-btn"
+                            class="btn-stop"
+                            style="display: none"
+                        >
+                            ⏹ Stop
+                        </button>
+                    </div>
+
+                    <div class="form-actions">
+                        <button
+                            id="clear-config-btn"
+                            class="btn-outline"
+                            style="margin-top: 1rem"
+                        >
+                            Clear Saved Configuration
+                        </button>
+                    </div>
+                </section>
+
+                <section class="stream-section">
+                    <h2 class="section-title">Generation Stream</h2>
+                    <div id="stream-content" class="stream-box">
+                        <div class="stream-placeholder">
+                            Generation output will appear here...
+                        </div>
+                    </div>
+                </section>
+
+                <section class="result-section" style="display: none">
+                    <div class="result-grid">
+                        <div class="character-preview">
+                            <h2
+                                class="section-title"
+                                style="margin: 0 0 1rem 0"
+                            >
+                                Character
+                            </h2>
+                            <div
+                                style="
+                                    background: rgba(59, 130, 246, 0.1);
+                                    border-left: 3px solid #3b82f6;
+                                    padding: 0.75rem;
+                                    margin-bottom: 1rem;
+                                    border-radius: 0.375rem;
+                                    font-size: 0.875rem;
+                                    color: var(--text-secondary);
+                                "
+                            >
+                                💡 <strong>Tip:</strong> You can edit any field
+                                below before downloading. Click individual
+                                "Reset" buttons to restore the original
+                                AI-generated version.
+                            </div>
+
+                            <!-- Description Field -->
+                            <div
+                                class="character-field"
+                                style="margin-bottom: 1.5rem"
+                            >
+                                <div
+                                    style="
+                                        display: flex;
+                                        justify-content: space-between;
+                                        align-items: center;
+                                        margin-bottom: 0.5rem;
+                                    "
+                                >
+                                    <h3
+                                        style="
+                                            margin: 0;
+                                            font-size: 1.1rem;
+                                            font-weight: 600;
+                                        "
+                                    >
+                                        Description
+                                    </h3>
+                                    <button
+                                        id="reset-description-btn"
+                                        class="btn-secondary"
+                                        style="
+                                            display: none;
+                                            padding: 0.3rem 0.8rem;
+                                            font-size: 0.75rem;
+                                        "
+                                        title="Reset description to original"
+                                    >
+                                        🔄 Reset
+                                    </button>
+                                </div>
+                                <textarea
+                                    id="character-description"
+                                    class="content-box"
+                                    style="
+                                        width: 100%;
+                                        min-height: 150px;
+                                        font-family: inherit;
+                                        font-size: 0.9375rem;
+                                        line-height: 1.6;
+                                        resize: vertical;
+                                        padding: 1rem;
+                                        border: 1px solid
+                                            rgba(139, 92, 246, 0.2);
+                                        border-radius: 0.5rem;
+                                        background: var(--surface-color);
+                                        color: var(--text-color);
+                                    "
+                                    placeholder="Character description will appear here..."
+                                ></textarea>
+                            </div>
+
+                            <!-- Personality Field -->
+                            <div
+                                class="character-field"
+                                style="margin-bottom: 1.5rem"
+                            >
+                                <div
+                                    style="
+                                        display: flex;
+                                        justify-content: space-between;
+                                        align-items: center;
+                                        margin-bottom: 0.5rem;
+                                    "
+                                >
+                                    <h3
+                                        style="
+                                            margin: 0;
+                                            font-size: 1.1rem;
+                                            font-weight: 600;
+                                        "
+                                    >
+                                        Personality
+                                    </h3>
+                                    <button
+                                        id="reset-personality-btn"
+                                        class="btn-secondary"
+                                        style="
+                                            display: none;
+                                            padding: 0.3rem 0.8rem;
+                                            font-size: 0.75rem;
+                                        "
+                                        title="Reset personality to original"
+                                    >
+                                        🔄 Reset
+                                    </button>
+                                </div>
+                                <textarea
+                                    id="character-personality"
+                                    class="content-box"
+                                    style="
+                                        width: 100%;
+                                        min-height: 120px;
+                                        font-family: inherit;
+                                        font-size: 0.9375rem;
+                                        line-height: 1.6;
+                                        resize: vertical;
+                                        padding: 1rem;
+                                        border: 1px solid
+                                            rgba(139, 92, 246, 0.2);
+                                        border-radius: 0.5rem;
+                                        background: var(--surface-color);
+                                        color: var(--text-color);
+                                    "
+                                    placeholder="Character personality will appear here..."
+                                ></textarea>
+                            </div>
+
+                            <!-- Scenario Field -->
+                            <div
+                                class="character-field"
+                                style="margin-bottom: 1.5rem"
+                            >
+                                <div
+                                    style="
+                                        display: flex;
+                                        justify-content: space-between;
+                                        align-items: center;
+                                        margin-bottom: 0.5rem;
+                                    "
+                                >
+                                    <h3
+                                        style="
+                                            margin: 0;
+                                            font-size: 1.1rem;
+                                            font-weight: 600;
+                                        "
+                                    >
+                                        Scenario
+                                    </h3>
+                                    <button
+                                        id="reset-scenario-btn"
+                                        class="btn-secondary"
+                                        style="
+                                            display: none;
+                                            padding: 0.3rem 0.8rem;
+                                            font-size: 0.75rem;
+                                        "
+                                        title="Reset scenario to original"
+                                    >
+                                        🔄 Reset
+                                    </button>
+                                </div>
+                                <textarea
+                                    id="character-scenario"
+                                    class="content-box"
+                                    style="
+                                        width: 100%;
+                                        min-height: 100px;
+                                        font-family: inherit;
+                                        font-size: 0.9375rem;
+                                        line-height: 1.6;
+                                        resize: vertical;
+                                        padding: 1rem;
+                                        border: 1px solid
+                                            rgba(139, 92, 246, 0.2);
+                                        border-radius: 0.5rem;
+                                        background: var(--surface-color);
+                                        color: var(--text-color);
+                                    "
+                                    placeholder="Character scenario will appear here..."
+                                ></textarea>
+                            </div>
+
+                            <!-- First Message Field -->
+                            <div
+                                class="character-field"
+                                style="margin-bottom: 1.5rem"
+                            >
+                                <div
+                                    style="
+                                        display: flex;
+                                        justify-content: space-between;
+                                        align-items: center;
+                                        margin-bottom: 0.5rem;
+                                    "
+                                >
+                                    <h3
+                                        style="
+                                            margin: 0;
+                                            font-size: 1.1rem;
+                                            font-weight: 600;
+                                        "
+                                    >
+                                        First Message
+                                    </h3>
+                                    <button
+                                        id="reset-first-message-btn"
+                                        class="btn-secondary"
+                                        style="
+                                            display: none;
+                                            padding: 0.3rem 0.8rem;
+                                            font-size: 0.75rem;
+                                        "
+                                        title="Reset first message to original"
+                                    >
+                                        🔄 Reset
+                                    </button>
+                                </div>
+                                <textarea
+                                    id="character-first-message"
+                                    class="content-box"
+                                    style="
+                                        width: 100%;
+                                        min-height: 80px;
+                                        font-family: inherit;
+                                        font-size: 0.9375rem;
+                                        line-height: 1.6;
+                                        resize: vertical;
+                                        padding: 1rem;
+                                        border: 1px solid
+                                            rgba(139, 92, 246, 0.2);
+                                        border-radius: 0.5rem;
+                                        background: var(--surface-color);
+                                        color: var(--text-color);
+                                    "
+                                    placeholder="Character first message will appear here..."
+                                ></textarea>
+                            </div>
+                        </div>
+
+                        <div class="image-preview">
+                            <h2 class="section-title">Image</h2>
+                            <div id="image-content" class="content-box">
+                                <div class="image-placeholder">
+                                    <div class="loading-spinner"></div>
+                                </div>
+                            </div>
+
+                            <!-- Image Prompt Editor -->
+                            <div
+                                id="image-prompt-editor"
+                                style="margin-top: 1rem; display: none"
+                            >
+                                <details style="margin-bottom: 1rem">
+                                    <summary
+                                        style="
+                                            cursor: pointer;
+                                            font-weight: 500;
+                                            padding: 0.5rem;
+                                            background: rgba(139, 92, 246, 0.1);
+                                            border-radius: 0.375rem;
+                                            user-select: none;
+                                        "
+                                    >
+                                        ✏️ Edit Image Prompt (Advanced)
+                                    </summary>
+                                    <div
+                                        style="
+                                            margin-top: 0.5rem;
+                                            padding: 0.5rem;
+                                        "
+                                    >
+                                        <label
+                                            for="custom-image-prompt"
+                                            class="label"
+                                            style="
+                                                margin-bottom: 0.5rem;
+                                                display: block;
+                                            "
+                                        >
+                                            Customize the image generation
+                                            prompt:
+                                        </label>
+                                        <textarea
+                                            id="custom-image-prompt"
+                                            class="input"
+                                            rows="6"
+                                            placeholder="Image prompt will appear here when you click Regenerate Image..."
+                                            style="
+                                                font-family: monospace;
+                                                font-size: 0.875rem;
+                                                resize: vertical;
+                                            "
+                                        ></textarea>
+                                        <p
+                                            style="
+                                                font-size: 0.75rem;
+                                                color: #9ca3af;
+                                                margin-top: 0.5rem;
+                                            "
+                                        >
+                                            💡 Tip: Edit this prompt to
+                                            customize the image appearance.
+                                            Leave empty to use auto-generated
+                                            prompt.
+                                        </p>
+                                    </div>
+                                </details>
+                            </div>
+
+                            <div
+                                class="image-controls"
+                                style="margin-top: 1rem; display: none"
+                                id="image-controls"
+                            >
+                                <button
+                                    id="regenerate-image-btn"
+                                    class="btn-outline"
+                                    style="margin-right: 0.5rem"
+                                >
+                                    🔄 Regenerate Image
+                                </button>
+                                <button
+                                    id="upload-image-btn"
+                                    class="btn-outline"
+                                >
+                                    📁 Upload Custom Image
+                                </button>
+                                <input
+                                    type="file"
+                                    id="image-upload-input"
+                                    accept="image/png,image/jpeg,image/jpg"
+                                    style="display: none"
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="actions">
+                        <button
+                            id="download-btn"
+                            class="btn-secondary"
+                            style="display: none"
+                        >
+                            Download Character Card (PNG)
+                        </button>
+                        <button
+                            id="download-json-btn"
+                            class="btn-outline"
+                            style="display: none"
+                        >
+                            Download Character JSON
+                        </button>
+                        <button id="regenerate-btn" class="btn-outline">
+                            Regenerate
+                        </button>
+                    </div>
+                </section>
+            </main>
+
+            <footer class="footer">
+                <div class="api-status" id="api-status">
+                    <span class="status-indicator status-offline"></span>
+                    <span class="status-text">API Status: Checking...</span>
+                </div>
+                <div class="footer-actions">
+                    <button
+                        id="test-connection-btn"
+                        class="btn-outline"
+                        style="font-size: 0.85rem"
+                    >
+                        Test Connection
+                    </button>
+                </div>
+            </footer>
+        </div>
+
+        <script src="src/scripts/config.js"></script>
+        <script src="src/scripts/api.js"></script>
+        <script src="src/scripts/character-generator.js"></script>
+        <script src="src/scripts/image-generator.js"></script>
+        <script src="src/scripts/png-encoder.js"></script>
+        <script src="src/scripts/main.js"></script>
+    </body>
+</html>
