@@ -81,7 +81,7 @@
                                     type="text"
                                     id="text-api-base"
                                     class="input"
-                                    placeholder="http://localhost:3001 (proxy server)"
+                                    placeholder="Your API Base URL"
                                     required
                                 />
                             </div>
@@ -120,7 +120,7 @@
                                     type="text"
                                     id="image-api-base"
                                     class="input"
-                                    placeholder="http://localhost:3001 (optional)"
+                                    placeholder="Your Image API Base URL (optional)"
                                 />
                             </div>
 
@@ -132,7 +132,7 @@
                                     type="password"
                                     id="image-api-key"
                                     class="input"
-                                    placeholder="Your ImageRouter API key (optional)"
+                                    placeholder="Your Image API key (optional)"
                                 />
                             </div>
 
@@ -158,6 +158,87 @@
                                     class="input"
                                     placeholder="e.g., 1024x1024, 512x512 (optional)"
                                 />
+                            </div>
+
+                            <!-- API Key Persistence Toggle -->
+                            <div class="form-group">
+                                <label class="label">API Key Persistence</label>
+                                <div
+                                    style="
+                                        display: flex;
+                                        align-items: center;
+                                        gap: 0.5rem;
+                                    "
+                                >
+                                    <label class="switch">
+                                        <input
+                                            type="checkbox"
+                                            id="persist-api-keys"
+                                        />
+                                        <span class="slider"></span>
+                                    </label>
+                                    <span
+                                        style="
+                                            font-size: 0.875rem;
+                                            color: var(--text-secondary);
+                                        "
+                                    >
+                                        Save API keys to browser storage
+                                    </span>
+                                </div>
+                                <p
+                                    style="
+                                        font-size: 0.75rem;
+                                        color: #9ca3af;
+                                        margin-top: 0.5rem;
+                                    "
+                                >
+                                    💡 When enabled, API keys are saved locally
+                                    and persist after browser restart. When
+                                    disabled, keys are cleared when you close
+                                    the tab or restart the browser.
+                                </p>
+                            </div>
+
+                            <!-- Image Generation Toggle -->
+                            <div class="form-group">
+                                <label class="label">Image Generation</label>
+                                <div
+                                    style="
+                                        display: flex;
+                                        align-items: center;
+                                        gap: 0.5rem;
+                                    "
+                                >
+                                    <label class="switch">
+                                        <input
+                                            type="checkbox"
+                                            id="enable-image-generation"
+                                            checked
+                                        />
+                                        <span class="slider"></span>
+                                    </label>
+                                    <span
+                                        style="
+                                            font-size: 0.875rem;
+                                            color: var(--text-secondary);
+                                        "
+                                    >
+                                        Generate images automatically
+                                    </span>
+                                </div>
+                                <p
+                                    style="
+                                        font-size: 0.75rem;
+                                        color: #9ca3af;
+                                        margin-top: 0.5rem;
+                                    "
+                                >
+                                    💡 When disabled, images won't be generated
+                                    automatically (saves API costs). You can
+                                    still upload your own images and regenerate
+                                    prompts.
+                                </p>
                             </div>
                         </div>
                     </details>
@@ -496,17 +577,43 @@
                                             Customize the image generation
                                             prompt:
                                         </label>
-                                        <textarea
-                                            id="custom-image-prompt"
-                                            class="input"
-                                            rows="6"
-                                            placeholder="Image prompt will appear here when you click Regenerate Image..."
-                                            style="
-                                                font-family: monospace;
-                                                font-size: 0.875rem;
-                                                resize: vertical;
-                                            "
-                                        ></textarea>
+                                        <div style="position: relative">
+                                            <textarea
+                                                id="custom-image-prompt"
+                                                class="input"
+                                                rows="6"
+                                                maxlength="1000"
+                                                placeholder="Image prompt will appear here when you click Regenerate Image..."
+                                                style="
+                                                    font-family: monospace;
+                                                    font-size: 0.875rem;
+                                                    resize: vertical;
+                                                    padding-bottom: 2rem;
+                                                "
+                                                oninput="window.updatePromptCharCount()"
+                                            ></textarea>
+                                            <div
+                                                id="prompt-char-count"
+                                                style="
+                                                    position: absolute;
+                                                    bottom: 0.5rem;
+                                                    right: 0.5rem;
+                                                    font-size: 0.75rem;
+                                                    color: #9ca3af;
+                                                    background: rgba(
+                                                        255,
+                                                        255,
+                                                        255,
+                                                        0.9
+                                                    );
+                                                    padding: 0.125rem 0.25rem;
+                                                    border-radius: 0.25rem;
+                                                    pointer-events: none;
+                                                "
+                                            >
+                                                0/1000
+                                            </div>
+                                        </div>
                                         <p
                                             style="
                                                 font-size: 0.75rem;
@@ -517,7 +624,7 @@
                                             💡 Tip: Edit this prompt to
                                             customize the image appearance.
                                             Leave empty to use auto-generated
-                                            prompt.
+                                            prompt. Maximum 1000 characters.
                                         </p>
                                     </div>
                                 </details>
@@ -528,19 +635,31 @@
                                 style="margin-top: 1rem; display: none"
                                 id="image-controls"
                             >
-                                <button
-                                    id="regenerate-image-btn"
-                                    class="btn-outline"
-                                    style="margin-right: 0.5rem"
-                                >
-                                    🔄 Regenerate Image
-                                </button>
-                                <button
-                                    id="upload-image-btn"
-                                    class="btn-outline"
-                                >
-                                    📁 Upload Custom Image
-                                </button>
+                                <div class="image-controls-wrapper">
+                                    <div class="image-buttons-row">
+                                        <button
+                                            id="regenerate-prompt-btn"
+                                            class="btn-small"
+                                            title="Generate a new image prompt without creating an image"
+                                        >
+                                            💡 Prompt
+                                        </button>
+                                        <button
+                                            id="regenerate-image-btn"
+                                            class="btn-small"
+                                            title="Generate a new image using the current prompt"
+                                        >
+                                            🖼️ Image
+                                        </button>
+                                        <button
+                                            id="upload-image-btn"
+                                            class="btn-small"
+                                            title="Upload your own character image"
+                                        >
+                                            📁 Upload
+                                        </button>
+                                    </div>
+                                </div>
                                 <input
                                     type="file"
                                     id="image-upload-input"

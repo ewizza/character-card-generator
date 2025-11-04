@@ -167,65 +167,9 @@ class ImageGenerator {
         `;
   }
 
-  async optimizeImageForCard(imageBlob, maxWidth = 512, maxHeight = 512) {
-    return new Promise((resolve, reject) => {
-      const img = new Image();
-      const url = URL.createObjectURL(imageBlob);
-
-      img.onload = () => {
-        URL.revokeObjectURL(url);
-
-        // Calculate new dimensions
-        let { width, height } = img;
-        const aspectRatio = width / height;
-
-        if (width > maxWidth || height > maxHeight) {
-          if (aspectRatio > 1) {
-            width = maxWidth;
-            height = Math.round(maxWidth / aspectRatio);
-          } else {
-            height = maxHeight;
-            width = Math.round(maxHeight * aspectRatio);
-          }
-          console.log("🔧 Image will be resized to:", width, "x", height);
-        }
-
-        // Create canvas for resized image
-        const canvas = document.createElement("canvas");
-        const ctx = canvas.getContext("2d");
-
-        canvas.width = width;
-        canvas.height = height;
-
-        // Clear canvas to prevent any potential memory artifacts
-        ctx.clearRect(0, 0, width, height);
-
-        // Draw resized image with high quality
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = "high";
-        ctx.drawImage(img, 0, 0, width, height);
-
-        // Convert to blob
-        canvas.toBlob(
-          (blob) => {
-            if (blob) {
-              resolve(blob);
-            } else {
-              reject(new Error("Failed to optimize image"));
-            }
-          },
-          "image/png",
-          0.9,
-        );
-      };
-
-      img.onerror = (error) => {
-        URL.revokeObjectURL(url);
-        reject(new Error("Failed to load image for optimization"));
-      };
-
-      img.src = url;
-    });
+  async optimizeImageForCard(imageBlob) {
+    // Return the original image blob without any resizing
+    return imageBlob;
   }
 
   displayLoadingState(container) {

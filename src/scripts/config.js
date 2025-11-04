@@ -33,6 +33,8 @@ class Config {
         maxRetries: 3,
         retryDelay: 1000,
         debugMode: false,
+        persistApiKeys: false,
+        enableImageGeneration: true,
       },
     };
   }
@@ -102,6 +104,20 @@ class Config {
     if (imageApiKey !== undefined) this.config.api.image.apiKey = imageApiKey;
     if (imageModel !== undefined) this.config.api.image.model = imageModel;
     if (imageSize !== undefined) this.config.api.image.size = imageSize;
+
+    // Load toggle states
+    const persistApiKeys = document.getElementById("persist-api-keys")?.checked;
+    if (persistApiKeys !== undefined) {
+      this.config.app.persistApiKeys = persistApiKeys;
+      // Update storage method when toggle changes
+      this.updateStorageMethod();
+    }
+
+    const enableImageGeneration = document.getElementById(
+      "enable-image-generation",
+    )?.checked;
+    if (enableImageGeneration !== undefined)
+      this.config.app.enableImageGeneration = enableImageGeneration;
   }
 
   get(path) {
@@ -148,6 +164,18 @@ class Config {
       if (imageApiKey) imageApiKey.value = this.config.api.image.apiKey || "";
       if (imageModel) imageModel.value = this.config.api.image.model || "";
       if (imageSize) imageSize.value = this.config.api.image.size || "";
+
+      // Save toggle states
+      const persistApiKeys = document.getElementById("persist-api-keys");
+      if (persistApiKeys)
+        persistApiKeys.checked = this.config.app.persistApiKeys || false;
+
+      const enableImageGeneration = document.getElementById(
+        "enable-image-generation",
+      );
+      if (enableImageGeneration)
+        enableImageGeneration.checked =
+          this.config.app.enableImageGeneration !== false;
     }, 100);
   }
 
@@ -207,14 +235,27 @@ class Config {
   }
 
   persistSensitiveValuesToSession() {
-    this.persistSessionValue(
-      SESSION_STORAGE_KEYS.textApiKey,
-      this.config.api.text.apiKey,
-    );
-    this.persistSessionValue(
-      SESSION_STORAGE_KEYS.imageApiKey,
-      this.config.api.image.apiKey,
-    );
+    if (this.config.app.persistApiKeys) {
+      // Store in localStorage when persistence is enabled
+      this.persistLocalStorageValue(
+        SESSION_STORAGE_KEYS.textApiKey,
+        this.config.api.text.apiKey,
+      );
+      this.persistLocalStorageValue(
+        SESSION_STORAGE_KEYS.imageApiKey,
+        this.config.api.image.apiKey,
+      );
+    } else {
+      // Store in sessionStorage when persistence is disabled
+      this.persistSessionValue(
+        SESSION_STORAGE_KEYS.textApiKey,
+        this.config.api.text.apiKey,
+      );
+      this.persistSessionValue(
+        SESSION_STORAGE_KEYS.imageApiKey,
+        this.config.api.image.apiKey,
+      );
+    }
   }
 
   persistSessionValue(key, value) {
@@ -225,18 +266,53 @@ class Config {
         sessionStorage.removeItem(key);
       }
     } catch (error) {
-      console.warn("Unable to persist sensitive config to sessionStorage:", error);
+      console.warn(
+        "Unable to persist sensitive config to sessionStorage:",
+        error,
+      );
+    }
+  }
+
+  persistLocalStorageValue(key, value) {
+    try {
+      if (value) {
+        localStorage.setItem(key, value);
+      } else {
+        localStorage.removeItem(key);
+      }
+    } catch (error) {
+      console.warn(
+        "Unable to persist sensitive config to localStorage:",
+        error,
+      );
     }
   }
 
   restoreSensitiveValuesFromSession() {
-    const textKey = this.getSessionValue(SESSION_STORAGE_KEYS.textApiKey);
-    if (textKey !== null) {
-      this.config.api.text.apiKey = textKey;
-    }
-    const imageKey = this.getSessionValue(SESSION_STORAGE_KEYS.imageApiKey);
-    if (imageKey !== null) {
-      this.config.api.image.apiKey = imageKey;
+    if (this.config.app.persistApiKeys) {
+      // Restore from localStorage when persistence is enabled
+      const textKey = this.getLocalStorageValue(
+        SESSION_STORAGE_KEYS.textApiKey,
+      );
+      if (textKey !== null) {
+        this.config.api.text.apiKey = textKey;
+      }
+      const imageKey = this.getLocalStorageValue(
+        SESSION_STORAGE_KEYS.imageApiKey,
+      );
+      if (imageKey !== null) {
+        this.config.api.image.apiKey = imageKey;
+      }
+    } else {
+      // Restore from sessionStorage when persistence is disabled
+      const textKey = this.getSessionValue(SESSION_STORAGE_KEYS.textApiKey);
+      if (textKey !== null) {
+        this.config.api.text.apiKey = textKey;
+      }
+      const imageKey = this.getSessionValue(SESSION_STORAGE_KEYS.imageApiKey);
+      if (imageKey !== null) {
+        this.config.api.image.apiKey = imageKey;
+      }
     }
   }
 
@@ -244,7 +320,19 @@ class Config {
     try {
       return sessionStorage.getItem(key);
     } catch (error) {
-      console.warn("Unable to read sensitive config from sessionStorage:", error);
+      console.warn(
+        "Unable to read sensitive config from sessionStorage:",
+        error,
+      );
+      return null;
+    }
+  }
+
+  getLocalStorageValue(key) {
+    try {
+      return localStorage.getItem(key);
+    } catch (error) {
+      console.warn("Unable to read sensitive config from localStorage:", error);
       return null;
     }
   }
@@ -275,7 +363,20 @@ class Config {
       try {
         sessionStorage.removeItem(key);
       } catch (error) {
-        console.warn("Unable to clear sessionStorage for sensitive config:", error);
+        console.warn(
+          "Unable to clear sessionStorage for sensitive config:",
+          error,
+        );
+      }
+    });
+    Object.values(SESSION_STORAGE_KEYS).forEach((key) => {
+      try {
+        localStorage.removeItem(key);
+      } catch (error) {
+        console.warn(
+          "Unable to clear localStorage for sensitive config:",
+          error,
+        );
       }
     });
   }
@@ -303,6 +404,44 @@ class Config {
   logRedacted(message, data) {
     if (this.getDebugMode()) {
       console.log(message, this.redactSensitiveData(data));
+    }
+  }
+
+  updateStorageMethod() {
+    // When changing persistence setting, migrate keys between storage methods
+    if (this.config.app.persistApiKeys) {
+      // Move from sessionStorage to localStorage
+      const textKey = this.getSessionValue(SESSION_STORAGE_KEYS.textApiKey);
+      const imageKey = this.getSessionValue(SESSION_STORAGE_KEYS.imageApiKey);
+
+      if (textKey) {
+        this.persistLocalStorageValue(SESSION_STORAGE_KEYS.textApiKey, textKey);
+        sessionStorage.removeItem(SESSION_STORAGE_KEYS.textApiKey);
+      }
+      if (imageKey) {
+        this.persistLocalStorageValue(
+          SESSION_STORAGE_KEYS.imageApiKey,
+          imageKey,
+        );
+        sessionStorage.removeItem(SESSION_STORAGE_KEYS.imageApiKey);
+      }
+    } else {
+      // Move from localStorage to sessionStorage
+      const textKey = this.getLocalStorageValue(
+        SESSION_STORAGE_KEYS.textApiKey,
+      );
+      const imageKey = this.getLocalStorageValue(
+        SESSION_STORAGE_KEYS.imageApiKey,
+      );
+
+      if (textKey) {
+        this.persistSessionValue(SESSION_STORAGE_KEYS.textApiKey, textKey);
+        localStorage.removeItem(SESSION_STORAGE_KEYS.textApiKey);
+      }
+      if (imageKey) {
+        this.persistSessionValue(SESSION_STORAGE_KEYS.imageApiKey, imageKey);
+        localStorage.removeItem(SESSION_STORAGE_KEYS.imageApiKey);
+      }
     }
   }
 }

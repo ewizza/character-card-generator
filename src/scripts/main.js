@@ -59,6 +59,14 @@ class CharacterGeneratorApp {
       this.handleRegenerateImage(),
     );
 
+    // Regenerate prompt button
+    const regeneratePromptBtn = document.getElementById(
+      "regenerate-prompt-btn",
+    );
+    regeneratePromptBtn.addEventListener("click", () =>
+      this.handleRegeneratePrompt(),
+    );
+
     // Character field reset buttons
     const resetDescriptionBtn = document.getElementById(
       "reset-description-btn",
@@ -164,6 +172,32 @@ class CharacterGeneratorApp {
         this.handleGenerate();
       }
     });
+
+    // API key persistence toggle
+    const persistApiKeysToggle = document.getElementById("persist-api-keys");
+    if (persistApiKeysToggle) {
+      persistApiKeysToggle.addEventListener("change", (e) => {
+        this.config.loadFromForm(); // Update config with new toggle state
+        this.config.saveConfig(); // Save the change
+        console.log(
+          `🔑 API key persistence ${e.target.checked ? "enabled" : "disabled"}`,
+        );
+      });
+    }
+
+    // Image generation toggle
+    const enableImageGenerationToggle = document.getElementById(
+      "enable-image-generation",
+    );
+    if (enableImageGenerationToggle) {
+      enableImageGenerationToggle.addEventListener("change", (e) => {
+        this.config.loadFromForm(); // Update config with new toggle state
+        this.config.saveConfig(); // Save the change
+        console.log(
+          `🖼️ Image generation ${e.target.checked ? "enabled" : "disabled"}`,
+        );
+      });
+    }
   }
 
   async checkAPIStatus() {
@@ -302,11 +336,14 @@ class CharacterGeneratorApp {
       // Display character
       this.displayCharacter();
 
-      // Check if image generation is configured
+      // Check if image generation is configured and enabled
       const imageApiBase = this.config.get("api.image.baseUrl");
       const imageApiKey = this.config.get("api.image.apiKey");
+      const enableImageGeneration = this.config.get(
+        "app.enableImageGeneration",
+      );
 
-      if (imageApiBase && imageApiKey) {
+      if (imageApiBase && imageApiKey && enableImageGeneration) {
         // Generate image with error handling
         try {
           this.showStreamMessage("🎨 Generating character image...\n");
@@ -330,14 +367,18 @@ class CharacterGeneratorApp {
         }
       } else {
         this.showStreamMessage(
-          "⏭️ Skipping image generation (no image API configured)\n",
+          "⏭️ Skipping image generation (image generation disabled or no API configured)\n",
         );
-        // Show placeholder with upload option
+        // Show placeholder with upload option when image generation is disabled
         const imageContainer = document.getElementById("image-content");
         imageContainer.innerHTML = `
           <div style="text-align: center; padding: 2rem; color: var(--text-secondary);">
-            <p>No image generated</p>
-            <p style="font-size: 0.875rem; margin-top: 0.5rem;">Configure image API or upload your own</p>
+            <div style="font-size: 2rem; margin-bottom: 1rem;">🖼️</div>
+            <p style="font-weight: 500; margin-bottom: 0.5rem;">Image Generation Disabled</p>
+            <p style="font-size: 0.875rem; margin-bottom: 1rem;">Enable image generation in settings or upload your own image</p>
+            <button onclick="document.getElementById('upload-image-btn').click()" style="padding: 0.5rem 1rem; background: var(--accent); color: white; border: none; border-radius: 0.375rem; cursor: pointer;">
+              📁 Upload Image
+            </button>
           </div>
         `;
       }
@@ -346,7 +387,7 @@ class CharacterGeneratorApp {
       this.showResultSection();
       document.getElementById("image-controls").style.display = "block";
 
-      // Show image prompt editor if image was generated
+      // Always show prompt editor when image API is configured (regardless of generation setting)
       if (imageApiBase && imageApiKey) {
         const promptEditor = document.getElementById("image-prompt-editor");
         const customPromptTextarea = document.getElementById(
@@ -356,13 +397,38 @@ class CharacterGeneratorApp {
         if (promptEditor) {
           promptEditor.style.display = "block";
 
-          // Populate the textarea with the auto-generated prompt
+          // Generate prompt only when image generation is enabled or if no prompt exists yet
           if (
+            customPromptTextarea &&
+            (!window.apiHandler.lastGeneratedImagePrompt ||
+              enableImageGeneration)
+          ) {
+            try {
+              const defaultPrompt = await window.apiHandler.generateImagePrompt(
+                this.currentCharacter.description,
+                this.currentCharacter.name,
+              );
+              customPromptTextarea.value = defaultPrompt;
+            } catch (error) {
+              console.error("Failed to generate image prompt:", error);
+              // Fall back to direct prompt building
+              const fallbackPrompt = window.apiHandler.buildDirectImagePrompt(
+                this.currentCharacter.description,
+                this.currentCharacter.name,
+              );
+              customPromptTextarea.value = fallbackPrompt;
+            }
+            // Update character counter
+            window.updatePromptCharCount();
+          } else if (
             customPromptTextarea &&
             window.apiHandler.lastGeneratedImagePrompt
           ) {
+            // Use the previously generated prompt
             customPromptTextarea.value =
               window.apiHandler.lastGeneratedImagePrompt;
+            // Update character counter
+            window.updatePromptCharCount();
           }
         }
       }
@@ -467,12 +533,8 @@ class CharacterGeneratorApp {
         this.currentImageUrl,
       );
 
-      // Optimize image to reduce final PNG size
-      imageBlob = await this.imageGenerator.optimizeImageForCard(
-        imageBlob,
-        1024,
-        1024,
-      );
+      // Use image as-is without resizing
+      imageBlob = await this.imageGenerator.optimizeImageForCard(imageBlob);
 
       // Convert to Spec V2 format
       const specV2Data = this.characterGenerator.toSpecV2Format(
@@ -513,6 +575,47 @@ class CharacterGeneratorApp {
     }
   }
 
+  async handleRegeneratePrompt() {
+    if (!this.currentCharacter) {
+      this.showNotification("Please generate a character first", "warning");
+      return;
+    }
+
+    const customPromptTextarea = document.getElementById("custom-image-prompt");
+    const promptEditor = document.getElementById("image-prompt-editor");
+
+    if (!customPromptTextarea || !promptEditor) {
+      this.showNotification("Prompt editor not found", "error");
+      return;
+    }
+
+    try {
+      this.showNotification("Regenerating image prompt...", "info");
+      // Use AI to generate a detailed natural language prompt
+      const newPrompt = await window.apiHandler.generateImagePrompt(
+        this.currentCharacter.description,
+        this.currentCharacter.name,
+      );
+      customPromptTextarea.value = newPrompt;
+      // Update character counter
+      window.updatePromptCharCount();
+      this.showNotification("Image prompt regenerated!", "success");
+    } catch (error) {
+      console.error("Failed to regenerate image prompt:", error);
+      // Fall back to direct prompt building
+      const fallbackPrompt = window.apiHandler.buildDirectImagePrompt(
+        this.currentCharacter.description,
+        this.currentCharacter.name,
+      );
+      customPromptTextarea.value = fallbackPrompt;
+      window.updatePromptCharCount();
+      this.showNotification("Using fallback prompt generation", "warning");
+    }
+
+    // Ensure prompt editor is visible
+    promptEditor.style.display = "block";
+  }
+
   async handleRegenerateImage() {
     if (!this.currentCharacter) {
       this.showNotification("Please generate a character first", "warning");
@@ -545,6 +648,8 @@ class CharacterGeneratorApp {
             this.currentCharacter.name,
           );
           customPromptTextarea.value = defaultPrompt;
+          // Update character counter
+          window.updatePromptCharCount();
         } catch (error) {
           console.error("Failed to generate image prompt:", error);
           // Fall back to direct prompt building
@@ -553,6 +658,8 @@ class CharacterGeneratorApp {
             this.currentCharacter.name,
           );
           customPromptTextarea.value = fallbackPrompt;
+          // Update character counter
+          window.updatePromptCharCount();
         }
       }
       promptEditor.style.display = "block";
@@ -577,6 +684,9 @@ class CharacterGeneratorApp {
     // Check if user has provided a custom prompt
     const customPromptTextarea = document.getElementById("custom-image-prompt");
     const customPrompt = customPromptTextarea?.value?.trim();
+
+    // Update character counter
+    window.updatePromptCharCount();
 
     // Clean up previous blob URL if it exists
     if (this.currentImageUrl && this.currentImageUrl.startsWith("blob:")) {
@@ -821,6 +931,28 @@ class CharacterGeneratorApp {
     this.currentImageUrl = null;
     document.getElementById("image-controls").style.display = "none";
 
+    // Clear image content and prompt editor
+    const imageContent = document.getElementById("image-content");
+    const promptEditor = document.getElementById("image-prompt-editor");
+    const customPromptTextarea = document.getElementById("custom-image-prompt");
+
+    if (imageContent) {
+      imageContent.innerHTML = `
+        <div class="image-placeholder">
+          <div class="loading-spinner"></div>
+        </div>
+      `;
+    }
+
+    if (promptEditor) {
+      promptEditor.style.display = "none";
+    }
+
+    if (customPromptTextarea) {
+      customPromptTextarea.value = "";
+      window.updatePromptCharCount();
+    }
+
     // Auto-trigger generation with the same inputs
     const concept = document.getElementById("character-concept").value.trim();
     if (concept) {
@@ -1034,6 +1166,26 @@ class CharacterGeneratorApp {
     });
   }
 }
+
+// Update prompt character counter
+window.updatePromptCharCount = function () {
+  const textarea = document.getElementById("custom-image-prompt");
+  const counter = document.getElementById("prompt-char-count");
+
+  if (textarea && counter) {
+    const length = textarea.value.length;
+    counter.textContent = `${length}/1000`;
+
+    // Change color based on character count
+    if (length >= 950) {
+      counter.style.color = "#ef4444"; // Red
+    } else if (length >= 850) {
+      counter.style.color = "#f59e0b"; // Orange
+    } else {
+      counter.style.color = "#9ca3af"; // Gray
+    }
+  }
+};
 
 // Wait for DOM to be loaded
 document.addEventListener("DOMContentLoaded", async () => {

@@ -263,6 +263,8 @@ class APIHandler {
     let imagePrompt;
     if (customPrompt) {
       imagePrompt = customPrompt;
+      // Apply length limit to custom prompts as well
+      imagePrompt = this.truncateImagePrompt(imagePrompt);
     } else {
       // Use AI to generate a detailed natural language prompt
       console.log("=== GENERATING IMAGE PROMPT VIA TEXT API ===");
@@ -421,7 +423,54 @@ class APIHandler {
       throw new Error("Text API returned an empty image prompt");
     }
 
-    return generatedPrompt.trim();
+    // Ensure the prompt fits within 1000 character limit with smart truncation
+    return this.truncateImagePrompt(generatedPrompt.trim());
+  }
+
+  truncateImagePrompt(prompt) {
+    const MAX_LENGTH = 1000;
+
+    if (prompt.length <= MAX_LENGTH) {
+      return prompt;
+    }
+
+    console.log(
+      `🔧 Truncating image prompt from ${prompt.length} to ${MAX_LENGTH} characters`,
+    );
+
+    // Split into sentences to preserve complete thoughts
+    const sentences = prompt.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [prompt];
+
+    let truncated = "";
+    let currentLength = 0;
+
+    for (const sentence of sentences) {
+      const trimmedSentence = sentence.trim();
+      if (currentLength + trimmedSentence.length <= MAX_LENGTH - 20) {
+        truncated += (truncated ? " " : "") + trimmedSentence;
+        currentLength += trimmedSentence.length + 1;
+      } else {
+        // Try to fit as much of the last sentence as possible
+        const remainingSpace = MAX_LENGTH - 20 - currentLength;
+        if (remainingSpace > 50) {
+          truncated += " " + trimmedSentence.substring(0, remainingSpace);
+        }
+        break;
+      }
+    }
+
+    // Add ellipsis if we truncated
+    if (truncated.length < prompt.length) {
+      truncated += "...";
+    }
+
+    // Final check to ensure we're at the limit
+    if (truncated.length > MAX_LENGTH) {
+      truncated = truncated.substring(0, MAX_LENGTH - 3) + "...";
+    }
+
+    console.log(`🔧 Final prompt length: ${truncated.length} characters`);
+    return truncated;
   }
 
   buildDirectImagePrompt(characterDescription, characterName) {
@@ -592,7 +641,7 @@ ${appearanceText}
 Personality Traits: ${personalityTraits}
 
 INSTRUCTIONS:
-Create an extremely detailed natural language prompt (up to 512 tokens) describing an image of this character. Include: subjects, setting, lighting, colors, composition, atmosphere, appearance, pose, expression, clothing, time of day, location details, lighting source/intensity/shadows, color palettes, foreground/middle ground/background, focal points, and overall mood.
+Create an extremely detailed natural language prompt (MAXIMUM 1000 CHARACTERS) describing an image of this character. Include: subjects, setting, lighting, colors, composition, atmosphere, appearance, pose, expression, clothing, time of day, location details, lighting source/intensity/shadows, color palettes, foreground/middle ground/background, focal points, and overall mood.
 
 Use vivid descriptive language. Emphasize personality through visual cues (facial expressions, body language, clothing). Use only positive statements about what should be in the image.
 
