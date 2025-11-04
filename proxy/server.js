@@ -7,8 +7,8 @@ const PORT = process.env.PORT || 2426;
 
 // Allow CORS from any origin in production (adjust for security as needed)
 const allowedOrigins = [
-  "http://localhost:8080",
-  "http://127.0.0.1:8080",
+  "http://localhost:2427",
+  "http://127.0.0.1:2427",
   process.env.FRONTEND_URL || "http://localhost:2427",
 ];
 

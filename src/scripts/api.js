@@ -9,8 +9,9 @@ class APIHandler {
 
   async makeRequest(endpoint, data, isImageRequest = false, stream = false) {
     // Use proxy server to bypass browser API restrictions
-    // Use relative URL so it works when deployed on VPS
-    const baseUrl = "";
+    // Detect if we're running locally or in Docker
+    const isLocalDev = window.location.port === "2427";
+    const baseUrl = isLocalDev ? "http://localhost:2426" : "";
     const proxyEndpoint = isImageRequest
       ? "/api/image/generations"
       : "/api/text/chat/completions";
