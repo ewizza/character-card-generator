@@ -5,10 +5,17 @@ const fetch = require("node-fetch");
 const app = express();
 const PORT = process.env.PORT || 2426;
 
+// Allow CORS from any origin in production (adjust for security as needed)
+const allowedOrigins = [
+  "http://localhost:8080",
+  "http://127.0.0.1:8080",
+  process.env.FRONTEND_URL || "http://localhost:2427",
+];
+
 // Enable CORS for the frontend
 app.use(
   cors({
-    origin: ["http://localhost:8080", "http://127.0.0.1:8080"],
+    origin: allowedOrigins,
     credentials: true,
   }),
 );
@@ -63,7 +70,7 @@ app.post("/api/text/chat/completions", async (req, res) => {
     const isOpenRouter = apiUrl.includes("openrouter.ai");
     const additionalHeaders = isOpenRouter
       ? {
-          "HTTP-Referer": "http://localhost:8080",
+          "HTTP-Referer": process.env.FRONTEND_URL || "http://localhost:2427",
           "X-Title": "SillyTavern Character Generator",
         }
       : {};
@@ -196,7 +203,7 @@ app.post("/api/image/generations", async (req, res) => {
     const isOpenRouter = apiUrl.includes("openrouter.ai");
     const additionalHeaders = isOpenRouter
       ? {
-          "HTTP-Referer": "http://localhost:8080",
+          "HTTP-Referer": process.env.FRONTEND_URL || "http://localhost:2427",
           "X-Title": "SillyTavern Character Generator",
         }
       : {};
