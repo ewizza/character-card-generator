@@ -123,6 +123,13 @@ class CharacterGeneratorApp {
     uploadImageBtn.addEventListener("click", () => {
       document.getElementById("image-upload-input").click();
     });
+	
+	//Save image button
+	const saveImageBtn = document.getElementById("save-image-btn");
+	if (saveImageBtn) {
+	saveImageBtn.addEventListener("click", () => this.handleSaveImage());
+	};
+
 
     // Image upload input
     const imageUploadInput = document.getElementById("image-upload-input");
@@ -626,6 +633,100 @@ class CharacterGeneratorApp {
       this.showNotification(`Download failed: ${error.message}`, "error");
     }
   }
+  async handleSaveImage() {
+  if (!this.currentImageUrl) {
+    this.showNotification("No image to save", "warning");
+    return;
+  }
+
+  try {
+    this.showNotification("Preparing image download...", "info");
+
+    let imageBlob = await this.imageGenerator.convertToBlob(this.currentImageUrl);
+
+    // Ensure PNG output
+    if (imageBlob.type !== "image/png") {
+      imageBlob = await this.convertBlobToPng(imageBlob);
+    }
+
+    const safeName = (this.currentCharacter?.name || "character")
+      .replace(/[^a-zA-Z0-9\s]/g, "")
+      .trim() || "character";
+
+    const url = URL.createObjectURL(imageBlob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${safeName}_image.png`;
+
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    setTimeout(() => URL.revokeObjectURL(url), 200);
+
+    const finalSize = this.imageGenerator.formatFileSize(imageBlob.size);
+    this.showNotification(`Image saved! Size: ${finalSize}`, "success");
+  } catch (error) {
+    console.error("Save image error:", error);
+    this.showNotification(`Save failed: ${error.message}`, "error");
+  }
+}
+
+async convertBlobToPng(blob) {
+  if (!blob || blob.type === "image/png") return blob;
+
+  // Prefer createImageBitmap where available
+  if (typeof createImageBitmap === "function") {
+    const bitmap = await createImageBitmap(blob);
+    try {
+      const canvas = document.createElement("canvas");
+      canvas.width = bitmap.width;
+      canvas.height = bitmap.height;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(bitmap, 0, 0);
+
+      const pngBlob = await new Promise((resolve, reject) => {
+        canvas.toBlob(
+          (b) => (b ? resolve(b) : reject(new Error("Failed to encode PNG"))),
+          "image/png",
+          0.95,
+        );
+      });
+      return pngBlob;
+    } finally {
+      if (typeof bitmap.close === "function") bitmap.close();
+    }
+  }
+
+  // Fallback: Image element + object URL
+  const objUrl = URL.createObjectURL(blob);
+  try {
+    const img = await new Promise((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = () => reject(new Error("Failed to load image for PNG conversion"));
+      el.src = objUrl;
+    });
+
+    const canvas = document.createElement("canvas");
+    canvas.width = img.width;
+    canvas.height = img.height;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(img, 0, 0);
+
+    const pngBlob = await new Promise((resolve, reject) => {
+      canvas.toBlob(
+        (b) => (b ? resolve(b) : reject(new Error("Failed to encode PNG"))),
+        "image/png",
+        0.95,
+      );
+    });
+    return pngBlob;
+  } finally {
+    URL.revokeObjectURL(objUrl);
+  }
+}
+
 
   async handleRegeneratePrompt() {
     if (!this.currentCharacter) {

@@ -1,0 +1,69 @@
+﻿diff --git a/index.html b/index.html
+--- a/index.html
++++ b/index.html
+@@ -339,6 +339,10 @@
+                                     <button id="upload-image-btn" class="btn-small"
+                                         title="Upload your own character image">
+                                         📁 Upload
+                                     </button>
++                                    <button id="save-image-btn" class="btn-small"
++                                        title="Save the current image as a PNG file">
++                                        💾 Save
++                                    </button>
+                                 </div>
+                             </div>
+                             <input type="file" id="image-upload-input" accept="image/png,image/jpeg,image/jpg"
+                                 style="display: none" />
+diff --git a/src/scripts/main.js b/src/scripts/main.js
+--- a/src/scripts/main.js
++++ b/src/scripts/main.js
+@@ -121,12 +121,18 @@
+     // Upload image button
+     const uploadImageBtn = document.getElementById("upload-image-btn");
+     uploadImageBtn.addEventListener("click", () => {
+       document.getElementById("image-upload-input").click();
+     });
+-
++ 
++    // Save current image button
++    const saveImageBtn = document.getElementById("save-image-btn");
++    if (saveImageBtn) {
++      saveImageBtn.addEventListener("click", () => this.handleSaveImage());
++    }
++ 
+     // Image upload input
+     const imageUploadInput = document.getElementById("image-upload-input");
+     imageUploadInput.addEventListener("change", (e) =>
+       this.handleImageUpload(e),
+     );
+@@ -628,6 +634,101 @@
+     }
+   }
+ 
++  async handleSaveImage() {
++    if (!this.currentImageUrl) {
++      this.showNotification("No image to save", "warning");
++      return;
++    }
++    try {
++      this.showNotification("Preparing image download...", "info");
++      let imageBlob = await this.imageGenerator.convertToBlob(this.currentImageUrl);
++      if (imageBlob.type !== "image/png") {
++        imageBlob = await this.convertBlobToPng(imageBlob);
++      }
++      const safeName = (this.currentCharacter?.name || "character")
++        .replace(/[^a-zA-Z0-9\s]/g, "")
++        .trim() || "character";
++      const url = URL.createObjectURL(imageBlob);
++      const link = document.createElement("a");
++      link.href = url;
++      link.download = `${safeName}_image.png`;
++      document.body.appendChild(link);
++      link.click();
++      document.body.removeChild(link);
++      setTimeout(() => URL.revokeObjectURL(url), 200);
++      const finalSize = this.imageGenerator.formatFileSize(imageBlob.size);
++      this.showNotification(`Image saved! Size: ${finalSize}`, "success");
++    } catch (error) {
++      console.error("Save image error:", error);
++      this.sho
