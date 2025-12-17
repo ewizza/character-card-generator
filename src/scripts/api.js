@@ -26,9 +26,10 @@ class APIHandler {
       ? this.config.get("api.image.timeout")
       : this.config.get("api.text.timeout");
 
-    if (!apiKey) {
+    const keyRequired = !this.config.isLikelyLocalApi(apiUrl);
+    if (keyRequired && !apiKey) {
       throw new Error(
-        "API key is required. Please configure your API settings.",
+        "API key is required for non-local APIs. Please configure your API settings.",
       );
     }
 
@@ -40,11 +41,9 @@ class APIHandler {
 
     const url = `${baseUrl}${endpoint}`;
     // Proxy server handles authentication, pass API key and actual API URL in headers
-    const headers = {
-      "Content-Type": "application/json",
-      "X-API-Key": apiKey,
-      "X-API-URL": apiUrl,
-    };
+    const headers = { "Content-Type": "application/json", "X-API-URL": apiUrl };
+    // Only send a key when provided (local KoboldCpp commonly uses no key)
+    if (apiKey) headers["X-API-Key"] = apiKey;
 
     // Add streaming headers if needed
     if (stream) {
@@ -59,8 +58,12 @@ class APIHandler {
     this.config.log(`Request data:`, data);
     this.config.log(`Headers:`, headers);
     this.config.log(`Using proxy server: ${baseUrl}`);
-    this.config.log(`API Key (first 10 chars): ${apiKey.substring(0, 10)}...`);
-    this.config.log(`API Key length: ${apiKey.length}`);
+    if (apiKey) {
+      this.config.log(`API Key (first 10 chars): ${apiKey.substring(0, 10)}...`);
+      this.config.log(`API Key length: ${apiKey.length}`);
+    } else {
+      this.config.log("API Key: (none)");
+    }
 
     this.config.log("API Request:", {
       url,
@@ -79,7 +82,7 @@ class APIHandler {
     try {
       const response = await fetch(url, {
         method: "POST",
-        headers: { ...headers, Authorization: "[REDACTED]" },
+        headers,
         body: JSON.stringify(data),
         signal: controller.signal,
       });
@@ -226,7 +229,8 @@ class APIHandler {
         },
       ],
       temperature: 0.8,
-      max_tokens: 8192,
+      //max_tokens: 8192,
+      max_tokens: 4096,
       stream: !!onStream,
     };
 
@@ -412,7 +416,7 @@ class APIHandler {
           content: metaPrompt,
         },
       ],
-      max_tokens: 8192,
+      max_tokens: 1800, //8192,
       temperature: 0.7,
       stream: true, // Enable streaming to get only content, not reasoning
     };
@@ -940,8 +944,12 @@ BEGIN IMAGE PROMPT NOW:`;
   async testConnection() {
     try {
       const apiKey = this.config.get("api.text.apiKey");
+      const apiUrl = this.config.get("api.text.baseUrl");
+      const keyRequired = !this.config.isLikelyLocalApi(apiUrl);
       if (!apiKey) {
-        return { success: false, error: "No API key configured" };
+        if (keyRequired) {
+          return { success: false, error: "No API key configured" };
+        }
       }
 
       // Test with exact same format as working curl command

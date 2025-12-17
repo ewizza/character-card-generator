@@ -389,7 +389,12 @@ class CharacterGeneratorApp {
         "app.enableImageGeneration",
       );
 
-      if (imageApiBase && imageApiKey && enableImageGeneration) {
+      const imageKeyRequired = !this.config.isLikelyLocalApi(imageApiBase);
+      if (
+        imageApiBase &&
+        (imageApiKey || !imageKeyRequired) &&
+        enableImageGeneration
+      ) {
         // Generate image with error handling
         try {
           this.showStreamMessage("🎨 Generating character image...\n");
@@ -434,7 +439,8 @@ class CharacterGeneratorApp {
       document.getElementById("image-controls").style.display = "block";
 
       // Always show prompt editor when image API is configured (regardless of generation setting)
-      if (imageApiBase && imageApiKey) {
+      const promptKeyRequired = !this.config.isLikelyLocalApi(imageApiBase);
+      if (imageApiBase && (imageApiKey || !promptKeyRequired)) {
         const promptEditor = document.getElementById("image-prompt-editor");
         const customPromptTextarea = document.getElementById(
           "custom-image-prompt",
@@ -671,7 +677,8 @@ class CharacterGeneratorApp {
     const imageApiBase = this.config.get("api.image.baseUrl");
     const imageApiKey = this.config.get("api.image.apiKey");
 
-    if (!imageApiBase || !imageApiKey) {
+    const imageKeyRequired = !this.config.isLikelyLocalApi(imageApiBase);
+    if (!imageApiBase || (imageKeyRequired && !imageApiKey)) {
       this.showNotification(
         "Please configure image API settings first",
         "warning",

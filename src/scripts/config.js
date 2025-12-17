@@ -12,6 +12,39 @@ class Config {
     this.loadConfig().catch(console.error);
   }
 
+  // Treat local/private-network APIs as "no key required" by default.
+  // This enables KoboldCpp (and other local servers) which often do not use API keys.
+  isLikelyLocalApi(url) {
+    try {
+      if (!url || typeof url !== "string") return false;
+      const trimmed = url.trim();
+      if (!trimmed) return false;
+
+      // Ensure URL parser has a scheme
+      const withScheme = /^https?:\/\//i.test(trimmed)
+        ? trimmed
+        : `http://${trimmed}`;
+      const u = new URL(withScheme);
+      const host = (u.hostname || "").toLowerCase();
+
+      if (host === "localhost" || host === "127.0.0.1" || host === "0.0.0.0") {
+        return true;
+      }
+      // RFC1918
+      if (/^10\./.test(host)) return true;
+      if (/^192\.168\./.test(host)) return true;
+      const m172 = host.match(/^172\.(\d+)\./);
+      if (m172) {
+        const second = parseInt(m172[1], 10);
+        if (second >= 16 && second <= 31) return true;
+      }
+
+      return false;
+    } catch {
+      return false;
+    }
+  }
+
   getDefaultConfig() {
     return {
       api: {
@@ -213,11 +246,25 @@ class Config {
     if (!this.config.api.text.baseUrl) {
       errors.push("Text API base URL is required");
     }
-    if (!this.config.api.text.apiKey) {
+    const textKeyRequired = !this.isLikelyLocalApi(this.config.api.text.baseUrl);
+    if (textKeyRequired && !this.config.api.text.apiKey) {
       errors.push("Text API key is required");
     }
     if (!this.config.api.text.model) {
       errors.push("Text model is required");
+    }
+
+    // Image API validation (only when image generation is enabled)
+    if (this.config.app.enableImageGeneration !== false) {
+      if (!this.config.api.image.baseUrl) {
+        errors.push("Image API base URL is required (or disable image generation)");
+      }
+      const imageKeyRequired =
+        this.config.api.image.baseUrl &&
+        !this.isLikelyLocalApi(this.config.api.image.baseUrl);
+      if (imageKeyRequired && !this.config.api.image.apiKey) {
+        errors.push("Image API key is required");
+      }
     }
 
     return errors;
