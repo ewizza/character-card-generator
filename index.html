@@ -351,6 +351,10 @@
                                         title="Upload your own character image">
                                         📁 Upload
                                     </button>
+									<button id="save-image-btn" class="btn-small"
+										title="Save the current image as a PNG file">
+										💾 Save
+									</button>
                                 </div>
                             </div>
                             <input type="file" id="image-upload-input" accept="image/png,image/jpeg,image/jpg"
@@ -394,6 +398,7 @@
     </div>
 
     <script src="src/scripts/config.js?v=20250120"></script>
+    <script src="src/scripts/prompt-manager.js?v=20250120"></script>
     <script src="src/scripts/api.js?v=20250120"></script>
     <script src="src/scripts/character-generator.js?v=20250120"></script>
     <script src="src/scripts/image-generator.js?v=20250120"></script>
@@ -441,10 +446,43 @@
                 </div>
 
                 <div class="form-group">
-                    <label for="image-size" class="label">Image Size (optional)</label>
-                    <input type="text" id="image-size" class="input"
-                        placeholder="e.g., 1024x1024, 512x512 (optional)" />
+                    <label class="label">Image Size (optional)</label>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+                        <div>
+                            <label for="image-width" class="label" style="font-size: 0.75rem;">Width</label>
+                            <input type="number" id="image-width" class="input" min="64" max="2048" step="64"
+                                placeholder="1024" />
+                        </div>
+                        <div>
+                            <label for="image-height" class="label" style="font-size: 0.75rem;">Height</label>
+                            <input type="number" id="image-height" class="input" min="64" max="2048" step="64"
+                                placeholder="1024" />
+                        </div>
+                    </div>
                 </div>
+
+                <div class="form-group">
+                    <label for="image-sampler" class="label">Sampler</label>
+                    <select id="image-sampler" class="input" style="height: 3rem;">
+                        <option value="Euler">Euler</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="label">Image Quality</label>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+                        <div>
+                        <label for="image-steps" class="label" style="font-size: 0.75rem;">Steps</label>
+                        <input type="number" id="image-steps" class="input"
+                            min="1" max="150" step="1" placeholder="28" />
+                        </div>
+                        <div>
+                        <label for="image-cfg-scale" class="label" style="font-size: 0.75rem;">CFG Scale</label>
+                        <input type="number" id="image-cfg-scale" class="input"
+                            min="1" max="30" step="0.5" placeholder="7" />
+                        </div>
+                    </div>
+                </div>
+
 
                 <!-- API Key Persistence Toggle -->
                 <div class="form-group">
@@ -506,6 +544,69 @@
                         upload your own images and regenerate prompts.
                     </p>
                 </div>
+
+                <div class="form-group" style="margin-top: 1.5rem;">
+                    <div style="font-weight: 600; color: var(--text-primary);">
+                        Prompt Presets
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="prompt-preset-select" class="label">Preset</label>
+                    <select id="prompt-preset-select" class="input" style="height: 3rem;">
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="prompt-preset-name" class="label">Preset Name</label>
+                    <input type="text" id="prompt-preset-name" class="input" placeholder="Custom preset name" />
+                </div>
+
+                <div class="form-group" id="prompt-preset-pov-wrapper">
+                    <label for="prompt-preset-pov" class="label">Point of View</label>
+                    <select id="prompt-preset-pov" class="input" style="height: 3rem;">
+                        <option value="first">First Person</option>
+                        <option value="third">Third Person</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="prompt-preset-system" class="label">System Prompt</label>
+                    <textarea id="prompt-preset-system" class="input" rows="8" style="
+                                font-family: monospace;
+                                resize: vertical;
+                            "></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label for="prompt-preset-user-named" class="label">User Prompt (Named)</label>
+                    <textarea id="prompt-preset-user-named" class="input" rows="4" style="
+                                font-family: monospace;
+                                resize: vertical;
+                            "></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label for="prompt-preset-user-unnamed" class="label">User Prompt (Unnamed)</label>
+                    <textarea id="prompt-preset-user-unnamed" class="input" rows="4" style="
+                                font-family: monospace;
+                                resize: vertical;
+                            "></textarea>
+                </div>
+
+                <div class="form-group" style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+                    <button id="prompt-preset-new" class="btn-outline">New</button>
+                    <button id="prompt-preset-duplicate" class="btn-outline">Duplicate</button>
+                    <button id="prompt-preset-save" class="btn-secondary">Save</button>
+                    <button id="prompt-preset-delete" class="btn-outline">Delete</button>
+                    <button id="prompt-preset-reset" class="btn-outline">Reset to Default</button>
+                </div>
+
+                <div id="prompt-preset-message" style="
+                            font-size: 0.85rem;
+                            color: var(--text-secondary);
+                            margin-top: 0.25rem;
+                        "></div>
 
                 <div style="text-align: center; margin-top: 2rem">
                     <button id="clear-config-btn" class="btn-outline">

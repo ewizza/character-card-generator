@@ -12,6 +12,39 @@ class Config {
     this.loadConfig().catch(console.error);
   }
 
+  // Treat local/private-network APIs as "no key required" by default.
+  // This enables KoboldCpp (and other local servers) which often do not use API keys.
+  isLikelyLocalApi(url) {
+    try {
+      if (!url || typeof url !== "string") return false;
+      const trimmed = url.trim();
+      if (!trimmed) return false;
+
+      // Ensure URL parser has a scheme
+      const withScheme = /^https?:\/\//i.test(trimmed)
+        ? trimmed
+        : `http://${trimmed}`;
+      const u = new URL(withScheme);
+      const host = (u.hostname || "").toLowerCase();
+
+      if (host === "localhost" || host === "127.0.0.1" || host === "0.0.0.0") {
+        return true;
+      }
+      // RFC1918
+      if (/^10\./.test(host)) return true;
+      if (/^192\.168\./.test(host)) return true;
+      const m172 = host.match(/^172\.(\d+)\./);
+      if (m172) {
+        const second = parseInt(m172[1], 10);
+        if (second >= 16 && second <= 31) return true;
+      }
+
+      return false;
+    } catch {
+      return false;
+    }
+  }
+
   getDefaultConfig() {
     return {
       api: {
@@ -25,7 +58,11 @@ class Config {
           baseUrl: "",
           apiKey: "",
           model: "",
-          size: "",
+          width: 1024,
+          height: 1024,
+          sampler: "Euler",
+          steps: 28,
+          cfgScale: 7,
           timeout: 60000,
         },
       },
@@ -35,6 +72,10 @@ class Config {
         debugMode: false,
         persistApiKeys: false,
         enableImageGeneration: true,
+      },
+      prompts: {
+        selectedPresetId: "third_person",
+        customPresets: {},
       },
     };
   }
@@ -65,6 +106,7 @@ class Config {
         const saved = JSON.parse(savedConfig);
         this.stripPersistedApiKeys(saved);
         this.config = this.deepMerge(this.config, saved);
+        this.migrateLegacyImageSize();
         this.logRedacted("Loaded config from storage:", saved);
       } catch (error) {
         console.warn("Failed to load saved config:", error);
@@ -84,10 +126,16 @@ class Config {
     const textBaseUrl = document.getElementById("text-api-base")?.value?.trim();
     const textApiKey = document.getElementById("text-api-key")?.value?.trim();
     const textModel = document.getElementById("text-model")?.value?.trim();
+    const imageSteps = document.getElementById("image-steps")?.value?.trim();
+    const imageCfgScale = document.getElementById("image-cfg-scale")?.value?.trim();
+
 
     if (textBaseUrl !== undefined) this.config.api.text.baseUrl = textBaseUrl;
     if (textApiKey !== undefined) this.config.api.text.apiKey = textApiKey;
     if (textModel !== undefined) this.config.api.text.model = textModel;
+    if (imageSteps !== undefined) this.config.api.image.steps = this.normalizeSteps(imageSteps, this.config.api.image.steps);
+    if (imageCfgScale !== undefined) this.config.api.image.cfgScale = this.normalizeCfgScale(imageCfgScale, this.config.api.image.cfgScale);
+
 
     // No special handling needed when using proxy server
 
@@ -97,13 +145,41 @@ class Config {
       ?.value?.trim();
     const imageApiKey = document.getElementById("image-api-key")?.value?.trim();
     const imageModel = document.getElementById("image-model")?.value?.trim();
-    const imageSize = document.getElementById("image-size")?.value?.trim();
+    const imageWidth = document.getElementById("image-width")?.value?.trim();
+    const imageHeight = document.getElementById("image-height")?.value?.trim();
+    const imageSampler = document.getElementById("image-sampler")?.value?.trim();
 
     if (imageBaseUrl !== undefined)
       this.config.api.image.baseUrl = imageBaseUrl;
     if (imageApiKey !== undefined) this.config.api.image.apiKey = imageApiKey;
     if (imageModel !== undefined) this.config.api.image.model = imageModel;
-    if (imageSize !== undefined) this.config.api.image.size = imageSize;
+    if (imageWidth !== undefined) {
+      this.config.api.image.width = this.normalizeImageDimension(
+        imageWidth,
+        this.config.api.image.width,
+      );
+    }
+    if (imageHeight !== undefined) {
+      this.config.api.image.height = this.normalizeImageDimension(
+        imageHeight,
+        this.config.api.image.height,
+      );
+    }
+    if (imageSampler !== undefined) this.config.api.image.sampler = imageSampler;
+
+    if (imageSteps !== undefined) {
+      this.config.api.image.steps = this.normalizeSteps(
+        imageSteps,
+        this.config.api.image.steps,
+      );
+    }
+
+if (imageCfgScale !== undefined) {
+      this.config.api.image.cfgScale = this.normalizeCfgScale(
+        imageCfgScale,
+        this.config.api.image.cfgScale,
+      );
+    }
 
     // Load toggle states
     const persistApiKeys = document.getElementById("persist-api-keys")?.checked;
@@ -157,13 +233,23 @@ class Config {
       const imageBaseUrl = document.getElementById("image-api-base");
       const imageApiKey = document.getElementById("image-api-key");
       const imageModel = document.getElementById("image-model");
-      const imageSize = document.getElementById("image-size");
+      const imageWidth = document.getElementById("image-width");
+      const imageHeight = document.getElementById("image-height");
+      const imageSampler = document.getElementById("image-sampler");
+      const imageSteps = document.getElementById("image-steps");
+      const imageCfgScale = document.getElementById("image-cfg-scale");
 
-      if (imageBaseUrl)
-        imageBaseUrl.value = this.config.api.image.baseUrl || "";
+      if (imageSteps) imageSteps.value = this.config.api.image.steps ?? 28;
+      if (imageCfgScale) imageCfgScale.value = this.config.api.image.cfgScale ?? 7;
+      if (imageBaseUrl) imageBaseUrl.value = this.config.api.image.baseUrl || "";
       if (imageApiKey) imageApiKey.value = this.config.api.image.apiKey || "";
       if (imageModel) imageModel.value = this.config.api.image.model || "";
-      if (imageSize) imageSize.value = this.config.api.image.size || "";
+      if (imageWidth)
+        imageWidth.value = this.config.api.image.width || 1024;
+      if (imageHeight)
+        imageHeight.value = this.config.api.image.height || 1024;
+      if (imageSampler)
+        imageSampler.value = this.config.api.image.sampler || "Euler";
 
       // Save toggle states
       const persistApiKeys = document.getElementById("persist-api-keys");
@@ -197,6 +283,45 @@ class Config {
     return output;
   }
 
+  normalizeImageDimension(value, fallback = 1024) {
+    const parsed = parseInt(value, 10);
+    if (!Number.isFinite(parsed)) return fallback;
+    const clamped = Math.min(2048, Math.max(64, parsed));
+    return Math.round(clamped / 64) * 64;
+  }
+
+  normalizeSteps(value, fallback = 28) {
+    const parsed = parseInt(value, 10);
+    if (!Number.isFinite(parsed)) return fallback;
+    return Math.min(150, Math.max(1, parsed));
+  }
+
+normalizeCfgScale(value, fallback = 7) {
+    const parsed = parseFloat(value);
+    if (!Number.isFinite(parsed)) return fallback;
+    return Math.min(30, Math.max(1, parsed));
+  }
+
+
+  migrateLegacyImageSize() {
+    const imageConfig = this.config?.api?.image;
+    if (!imageConfig) return;
+
+    if (imageConfig.size && (!imageConfig.width || !imageConfig.height)) {
+      const match = imageConfig.size
+        .toLowerCase()
+        .match(/(\d+)\s*x\s*(\d+)/);
+      if (match) {
+        imageConfig.width = this.normalizeImageDimension(match[1], 1024);
+        imageConfig.height = this.normalizeImageDimension(match[2], 1024);
+      }
+    }
+
+    if (imageConfig.size) {
+      delete imageConfig.size;
+    }
+  }
+
   isObject(item) {
     return item && typeof item === "object" && !Array.isArray(item);
   }
@@ -213,11 +338,25 @@ class Config {
     if (!this.config.api.text.baseUrl) {
       errors.push("Text API base URL is required");
     }
-    if (!this.config.api.text.apiKey) {
+    const textKeyRequired = !this.isLikelyLocalApi(this.config.api.text.baseUrl);
+    if (textKeyRequired && !this.config.api.text.apiKey) {
       errors.push("Text API key is required");
     }
     if (!this.config.api.text.model) {
       errors.push("Text model is required");
+    }
+
+    // Image API validation (only when image generation is enabled)
+    if (this.config.app.enableImageGeneration !== false) {
+      if (!this.config.api.image.baseUrl) {
+        errors.push("Image API base URL is required (or disable image generation)");
+      }
+      const imageKeyRequired =
+        this.config.api.image.baseUrl &&
+        !this.isLikelyLocalApi(this.config.api.image.baseUrl);
+      if (imageKeyRequired && !this.config.api.image.apiKey) {
+        errors.push("Image API key is required");
+      }
     }
 
     return errors;

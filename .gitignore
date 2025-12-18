@@ -80,6 +80,11 @@ dist
 .cache/
 public
 
+# Prompt preset defaults
+!public/
+!public/prompts/
+!public/prompts/defaults.json
+
 # Vite build output
 dist/
 dist-ssr/

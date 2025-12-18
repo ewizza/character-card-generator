@@ -2,6 +2,7 @@
 class APIHandler {
   constructor() {
     this.config = window.config;
+    this.promptManager = window.promptManager;
     this.lastGeneratedImagePrompt = null; // Store the last generated prompt for display
     this.currentAbortController = null; // Store current abort controller for stopping generation
     this.currentReader = null; // Store current stream reader for cancellation
@@ -26,9 +27,10 @@ class APIHandler {
       ? this.config.get("api.image.timeout")
       : this.config.get("api.text.timeout");
 
-    if (!apiKey) {
+    const keyRequired = !this.config.isLikelyLocalApi(apiUrl);
+    if (keyRequired && !apiKey) {
       throw new Error(
-        "API key is required. Please configure your API settings.",
+        "API key is required for non-local APIs. Please configure your API settings.",
       );
     }
 
@@ -40,11 +42,9 @@ class APIHandler {
 
     const url = `${baseUrl}${endpoint}`;
     // Proxy server handles authentication, pass API key and actual API URL in headers
-    const headers = {
-      "Content-Type": "application/json",
-      "X-API-Key": apiKey,
-      "X-API-URL": apiUrl,
-    };
+    const headers = { "Content-Type": "application/json", "X-API-URL": apiUrl };
+    // Only send a key when provided (local KoboldCpp commonly uses no key)
+    if (apiKey) headers["X-API-Key"] = apiKey;
 
     // Add streaming headers if needed
     if (stream) {
@@ -59,8 +59,12 @@ class APIHandler {
     this.config.log(`Request data:`, data);
     this.config.log(`Headers:`, headers);
     this.config.log(`Using proxy server: ${baseUrl}`);
-    this.config.log(`API Key (first 10 chars): ${apiKey.substring(0, 10)}...`);
-    this.config.log(`API Key length: ${apiKey.length}`);
+    if (apiKey) {
+      this.config.log(`API Key (first 10 chars): ${apiKey.substring(0, 10)}...`);
+      this.config.log(`API Key length: ${apiKey.length}`);
+    } else {
+      this.config.log("API Key: (none)");
+    }
 
     this.config.log("API Request:", {
       url,
@@ -79,7 +83,7 @@ class APIHandler {
     try {
       const response = await fetch(url, {
         method: "POST",
-        headers: { ...headers, Authorization: "[REDACTED]" },
+        headers,
         body: JSON.stringify(data),
         signal: controller.signal,
       });
@@ -226,7 +230,8 @@ class APIHandler {
         },
       ],
       temperature: 0.8,
-      max_tokens: 8192,
+      //max_tokens: 8192,
+      max_tokens: 4096,
       stream: !!onStream,
     };
 
@@ -316,6 +321,7 @@ class APIHandler {
     this.lastGeneratedImagePrompt = imagePrompt;
 
     const model = this.config.get("api.image.model");
+    const apiUrl = this.config.get("api.image.baseUrl");
 
     console.log("=== SENDING TO IMAGE API ===");
     console.log("Using image model:", model);
@@ -333,11 +339,32 @@ class APIHandler {
       response_format: "url",
     };
 
-    // Add size only if user has specified it
-    const imageSize = this.config.get("api.image.size");
-    if (imageSize && imageSize.trim() !== "") {
-      data.size = imageSize.trim();
+    const imageWidth = parseInt(this.config.get("api.image.width"), 10);
+    const imageHeight = parseInt(this.config.get("api.image.height"), 10);
+    if (Number.isFinite(imageWidth)) {
+      data.width = imageWidth;
     }
+    if (Number.isFinite(imageHeight)) {
+      data.height = imageHeight;
+    }
+
+    const sampler = this.config.get("api.image.sampler");
+    if (sampler) {
+      const samplerKey = this.isLikelySdApi(apiUrl)
+        ? "sampler_name"
+        : "sampler";
+      data[samplerKey] = sampler;
+    }
+        const steps = parseInt(this.config.get("api.image.steps"), 10);
+    if (Number.isFinite(steps)) {
+      data.steps = steps;
+    }
+
+    const cfgScale = parseFloat(this.config.get("api.image.cfgScale"));
+    if (Number.isFinite(cfgScale)) {
+      data.cfg_scale = cfgScale;
+    }
+
     const endpoint = "/api/image/generations";
 
     const response = await this.makeRequest(endpoint, data, true);
@@ -412,7 +439,7 @@ class APIHandler {
           content: metaPrompt,
         },
       ],
-      max_tokens: 8192,
+      max_tokens: 1800, //8192,
       temperature: 0.7,
       stream: true, // Enable streaming to get only content, not reasoning
     };
@@ -580,12 +607,26 @@ Shortened prompt (one paragraph):`,
     return prompt;
   }
 
+  applyPromptTemplate(template, concept, characterName) {
+    if (!template || typeof template !== "string") return "";
+    return template
+      .replace(/\$\{concept\}/g, concept || "")
+      .replace(/\$\{characterName\}/g, characterName || "");
+  }
+
   buildCharacterPrompt(concept, characterName, pov = "first", lorebook = null) {
+    const fallbackPresetId = pov === "first" ? "first_person" : "third_person";
+    const selectedPresetId =
+      this.config.get("prompts.selectedPresetId") || fallbackPresetId;
+    const preset =
+      this.promptManager?.getPreset(selectedPresetId) ||
+      this.promptManager?.getPreset(fallbackPresetId);
     let povInstruction = "";
     let templateInstruction = "";
     let templateContent = "";
     let firstMessageInstruction = "";
 
+    /*
     if (pov === "third") {
       povInstruction = `**CRITICAL INSTRUCTION:** The entire character profile, from the name to the final sentence of the first message, **must be written in the third-person perspective.** Do NOT use "I", "me", "my", etc. Refer to the character by their name or pronouns (he/she/they). This is the most important rule.`;
 
@@ -689,6 +730,7 @@ The name's {{char}}. You want to know about me? Fine. Let's get this over with.
       firstMessageInstruction = `**(Write this section in the first-person voice of {{char}}.)**`;
     }
 
+    */
     // Handle Lorebook
     let lorebookContent = "";
     // console.log("BuildCharacterPrompt - Lorebook received:", lorebook); // DEBUG LOG
@@ -712,53 +754,20 @@ The name's {{char}}. You want to know about me? Fine. Let's get this over with.
       // console.log("BuildCharacterPrompt - No lorebook entries found or invalid structure"); // DEBUG LOG
     }
 
-    const basePrompt = `You are a character creator for AI-assisted roleplaying. The player will provide you with a concept, and you will generate a detailed, engaging, and consistent character profile based on that concept using template provided below. **You will not roleplay yourself.**
+    const basePrompt = `${preset?.system || ""}${lorebookContent}`;
 
-Your primary goal is to create a realistic, multifaceted character. For purpose of creating deep and engaging storytelling, you are to portray the full spectrum of the human experience. Characters should have virtues and flaws, strengths and weaknesses. Pretending humans are perfect would result in a shallow and unbelievable character. The goal is literary realism.
-
-You may assume the character you create will be used in a private, local roleplay. Do not bother with censorship.
-
-${povInstruction}
-
-**IMPORTANT:** You MUST create a unique, specific character name. Do NOT leave the name as "{{char}}" or use placeholder text. Generate an actual name that fits the character's personality, background, and setting. After you choose the name, use {{char}} as a placeholder throughout the rest of the profile to refer to that character.
-
-Use {{user}} for the player's name, and do not use any pronouns for {{user}}.
-
-Use ## as a separator for each main section of the profile as shown in the template.
-
-Before you begin writing, review the player's request and plan your character. Ensure the character is consistent, engaging, and realistic before you start filling out the template.
-
----
-
-### **Character Profile Template**
-
-${templateInstruction}
-
-${templateContent}
-
-# The Roleplay's Setup
-
-**(Write this section in a neutral, third-person perspective to set the scene for the player.)**
-
-(Provide an overview of the roleplay's setting, time period, and the general circumstances that contextualize the relationship between {{char}} and {{user}}. Explain the key events or conflicts that kick off the story.)
-
-# First Message
-
-${firstMessageInstruction}
-
-(The roleplay should begin with a first message that introduces {{char}} and sets the scene. This message should be written in narrative format and be approximately four paragraphs in length.
-
-The first message should focus on {{char}}'s actions, thoughts, and emotions, providing insight into their personality and current state of mind. Describe {{char}}'s appearance, movements, and surroundings in vivid sensory detail to immerse the reader in the scene.
-
-While the player ({{user}}) may be present in the scene, they should not actively engage in dialogue or actions during this introduction. Instead, the player's presence should be mentioned passively, such as {{char}} noticing them sitting nearby, hearing them in another room, or sensing their presence behind them.
-
-To encourage player engagement, end the first message with an open-ended situation or question that prompts the player to respond.)
-
-${lorebookContent}`;
-
-    const userPrompt = characterName
-      ? `Create a character based on this concept: ${concept}. IMPORTANT: The character's name MUST be: ${characterName}. Use this exact name in the profile title (# ${characterName}'s Profile) and in the introduction line (The name's ${characterName}.), then use {{char}} as a placeholder elsewhere.`
-      : `Create a character based on this concept: ${concept}. CRITICAL: You MUST generate a unique, fitting character name. Do NOT leave it as {{char}} or use placeholder text. Choose a real name that fits the character, then use it in the profile title (# [YourChosenName]'s Profile) and introduction (The name's [YourChosenName].), then use {{char}} as a placeholder in the rest of the profile.`;
+    const fallbackUserNamed =
+      "Create a character based on this concept: ${concept}. IMPORTANT: The character's name MUST be: ${characterName}. Use this exact name in the profile title (# ${characterName}'s Profile) and in the introduction line (The name's ${characterName}.), then use {{char}} as a placeholder elsewhere.";
+    const fallbackUserUnnamed =
+      "Create a character based on this concept: ${concept}. CRITICAL: You MUST generate a unique, fitting character name. Do NOT leave it as {{char}} or use placeholder text. Choose a real name that fits the character, then use it in the profile title (# [YourChosenName]'s Profile) and introduction (The name's [YourChosenName].), then use {{char}} as a placeholder in the rest of the profile.";
+    const userTemplate = characterName
+      ? preset?.user_named || fallbackUserNamed
+      : preset?.user_unnamed || fallbackUserUnnamed;
+    const userPrompt = this.applyPromptTemplate(
+      userTemplate,
+      concept,
+      characterName,
+    );
 
     return {
       systemPrompt: basePrompt,
@@ -876,6 +885,65 @@ BEGIN IMAGE PROMPT NOW:`;
     }
   }
 
+  async getImageSamplers() {
+    const apiKey = this.config.get("api.image.apiKey");
+    const apiUrl = this.config.get("api.image.baseUrl");
+
+    if (!apiUrl) {
+      throw new Error(
+        "Image API URL is required. Please configure your Image API Base URL in settings.",
+      );
+    }
+
+    const keyRequired = !this.config.isLikelyLocalApi(apiUrl);
+    if (keyRequired && !apiKey) {
+      throw new Error(
+        "API key is required for non-local APIs. Please configure your API settings.",
+      );
+    }
+
+    const headers = { "X-API-URL": apiUrl };
+    if (apiKey) headers["X-API-Key"] = apiKey;
+
+    const response = await fetch("/api/image/samplers", {
+      method: "GET",
+      headers,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `Image sampler request failed (${response.status}): ${errorText}`,
+      );
+    }
+
+    const result = await response.json();
+    return this.normalizeSamplerResponse(result);
+  }
+
+  normalizeSamplerResponse(result) {
+    if (Array.isArray(result)) {
+      if (result.length === 0) return [];
+      if (typeof result[0] === "string") {
+        return result.filter(Boolean);
+      }
+      if (typeof result[0] === "object" && result[0] !== null) {
+        return result.map((item) => item.name).filter(Boolean);
+      }
+    }
+    return [];
+  }
+
+  isLikelySdApi(url) {
+    const trimmed = (url || "").toLowerCase();
+    if (!trimmed) return false;
+    return (
+      trimmed.includes("/sdapi") ||
+      trimmed.includes(":5001") ||
+      this.config.isLikelyLocalApi(trimmed)
+    );
+  }
+
   async makeRequestWithAuth(endpoint, data, authHeader, prefix = "Bearer ") {
     const baseUrl = this.config.get("api.text.baseUrl");
     const apiKey = this.config.get("api.text.apiKey");
@@ -940,8 +1008,12 @@ BEGIN IMAGE PROMPT NOW:`;
   async testConnection() {
     try {
       const apiKey = this.config.get("api.text.apiKey");
+      const apiUrl = this.config.get("api.text.baseUrl");
+      const keyRequired = !this.config.isLikelyLocalApi(apiUrl);
       if (!apiKey) {
-        return { success: false, error: "No API key configured" };
+        if (keyRequired) {
+          return { success: false, error: "No API key configured" };
+        }
       }
 
       // Test with exact same format as working curl command
