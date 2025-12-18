@@ -7,6 +7,10 @@ A web application for creating character cards for SillyTavern. It uses AI model
 > [!IMPORTANT]
 > This application requires OpenAI-compatible API endpoint for text and is **modified** to use **koboldCPP image generation** with an openai fallback. It works with OpenAI, OpenRouter, and other services that implement the OpenAI API format **but this branch is designed to use koboldCPP as the backend for both LLM and image generation**.
 
+[!NEW]
+Added functionality to change and save your prompts. Clone the defaults or create from scratch. Make changes and save/delete. Changes stored in local storage.
+[!Promts](prompts.png)
+
 ## Core Capabilities
 
 ### Character Synthesis
