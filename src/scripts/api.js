@@ -320,6 +320,7 @@ class APIHandler {
     this.lastGeneratedImagePrompt = imagePrompt;
 
     const model = this.config.get("api.image.model");
+    const apiUrl = this.config.get("api.image.baseUrl");
 
     console.log("=== SENDING TO IMAGE API ===");
     console.log("Using image model:", model);
@@ -337,10 +338,21 @@ class APIHandler {
       response_format: "url",
     };
 
-    // Add size only if user has specified it
-    const imageSize = this.config.get("api.image.size");
-    if (imageSize && imageSize.trim() !== "") {
-      data.size = imageSize.trim();
+    const imageWidth = parseInt(this.config.get("api.image.width"), 10);
+    const imageHeight = parseInt(this.config.get("api.image.height"), 10);
+    if (Number.isFinite(imageWidth)) {
+      data.width = imageWidth;
+    }
+    if (Number.isFinite(imageHeight)) {
+      data.height = imageHeight;
+    }
+
+    const sampler = this.config.get("api.image.sampler");
+    if (sampler) {
+      const samplerKey = this.isLikelySdApi(apiUrl)
+        ? "sampler_name"
+        : "sampler";
+      data[samplerKey] = sampler;
     }
     const endpoint = "/api/image/generations";
 
@@ -878,6 +890,65 @@ BEGIN IMAGE PROMPT NOW:`;
         throw error; // All methods failed
       }
     }
+  }
+
+  async getImageSamplers() {
+    const apiKey = this.config.get("api.image.apiKey");
+    const apiUrl = this.config.get("api.image.baseUrl");
+
+    if (!apiUrl) {
+      throw new Error(
+        "Image API URL is required. Please configure your Image API Base URL in settings.",
+      );
+    }
+
+    const keyRequired = !this.config.isLikelyLocalApi(apiUrl);
+    if (keyRequired && !apiKey) {
+      throw new Error(
+        "API key is required for non-local APIs. Please configure your API settings.",
+      );
+    }
+
+    const headers = { "X-API-URL": apiUrl };
+    if (apiKey) headers["X-API-Key"] = apiKey;
+
+    const response = await fetch("/api/image/samplers", {
+      method: "GET",
+      headers,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `Image sampler request failed (${response.status}): ${errorText}`,
+      );
+    }
+
+    const result = await response.json();
+    return this.normalizeSamplerResponse(result);
+  }
+
+  normalizeSamplerResponse(result) {
+    if (Array.isArray(result)) {
+      if (result.length === 0) return [];
+      if (typeof result[0] === "string") {
+        return result.filter(Boolean);
+      }
+      if (typeof result[0] === "object" && result[0] !== null) {
+        return result.map((item) => item.name).filter(Boolean);
+      }
+    }
+    return [];
+  }
+
+  isLikelySdApi(url) {
+    const trimmed = (url || "").toLowerCase();
+    if (!trimmed) return false;
+    return (
+      trimmed.includes("/sdapi") ||
+      trimmed.includes(":5001") ||
+      this.config.isLikelyLocalApi(trimmed)
+    );
   }
 
   async makeRequestWithAuth(endpoint, data, authHeader, prefix = "Bearer ") {

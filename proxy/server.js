@@ -51,6 +51,13 @@ function parseSize(sizeStr) {
   return { width: parseInt(m[1], 10), height: parseInt(m[2], 10) };
 }
 
+function normalizeDimension(value, fallback = 1024) {
+  const parsed = parseInt(value, 10);
+  if (Number.isNaN(parsed)) return fallback;
+  const clamped = Math.min(2048, Math.max(64, parsed));
+  return Math.round(clamped / 64) * 64;
+}
+
 function buildSdTxt2ImgUrl(apiUrl) {
   let base = normalizeBase(apiUrl);
   if (base.endsWith("/sdapi/v1/txt2img")) return base;
@@ -60,6 +67,15 @@ function buildSdTxt2ImgUrl(apiUrl) {
   // If user supplied something containing /sdapi/..., trim to root.
   if (base.includes("/sdapi/")) base = base.split("/sdapi/")[0];
   return `${base}/sdapi/v1/txt2img`;
+}
+
+function buildSdSamplersUrl(apiUrl) {
+  let base = normalizeBase(apiUrl);
+  if (base.endsWith("/sdapi/v1/samplers")) return base;
+  if (base.endsWith("/sdapi/v1")) return `${base}/samplers`;
+  if (base.endsWith("/v1")) base = base.slice(0, -3);
+  if (base.includes("/sdapi/")) base = base.split("/sdapi/")[0];
+  return `${base}/sdapi/v1/samplers`;
 }
 
 // Allow CORS from any origin in production (adjust for security as needed)
@@ -257,7 +273,16 @@ app.post("/api/image/generations", async (req, res) => {
 
     // KoboldCpp Stable Diffusion API (A1111-compatible) adapter
     if (preferSdApi) {
-      const { width, height } = parseSize(req.body.size || size);
+      let width;
+      let height;
+      if (req.body.width && req.body.height) {
+        width = normalizeDimension(req.body.width, 1024);
+        height = normalizeDimension(req.body.height, 1024);
+      } else {
+        const parsed = parseSize(req.body.size || size);
+        width = normalizeDimension(parsed.width, 1024);
+        height = normalizeDimension(parsed.height, 1024);
+      }
       const n = Math.max(1, Number(req.body.n || 1));
 
       const payload = {
@@ -344,6 +369,13 @@ app.post("/api/image/generations", async (req, res) => {
     if (size && !requestBody.size) {
       requestBody.size = size;
     }
+    if (
+      requestBody.width &&
+      requestBody.height &&
+      !requestBody.size
+    ) {
+      requestBody.size = `${requestBody.width}x${requestBody.height}`;
+    }
 
     // Add OpenRouter-specific headers if using OpenRouter
     const isOpenRouter = apiUrl.includes("openrouter.ai");
@@ -415,6 +447,73 @@ app.post("/api/image/generations", async (req, res) => {
       error: {
         code: "500",
         message: "Internal server error in image proxy",
+        details: error.message,
+      },
+    });
+  }
+});
+
+// Proxy endpoint for image samplers
+app.get("/api/image/samplers", async (req, res) => {
+  try {
+    const apiKey = req.headers["x-api-key"];
+    const apiUrl = req.headers["x-api-url"];
+
+    if (!apiUrl) {
+      return res.status(400).json({
+        error: {
+          code: "400",
+          message: "Image API URL required",
+          details: "Please configure your Image API Base URL in the settings",
+        },
+      });
+    }
+
+    const preferSdApi = looksLikeSdApi(apiUrl) || isLikelyLocalUrl(apiUrl);
+    const samplerUrl = preferSdApi
+      ? buildSdSamplersUrl(apiUrl)
+      : `${normalizeBase(apiUrl)}/samplers`;
+
+    let response;
+    if (apiKey) {
+      response = await fetch(samplerUrl, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+        },
+      });
+
+      if (response.status === 401) {
+        response = await fetch(samplerUrl, {
+          method: "GET",
+          headers: {
+            "X-API-Key": apiKey,
+          },
+        });
+      }
+    } else {
+      response = await fetch(samplerUrl, { method: "GET" });
+    }
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      return res.status(response.status).json({
+        error: {
+          code: response.status.toString(),
+          message: `Image sampler error: ${response.statusText}`,
+          details: errorText,
+        },
+      });
+    }
+
+    const data = await response.json();
+    res.json(data);
+  } catch (error) {
+    console.error("Image sampler proxy error:", error);
+    res.status(500).json({
+      error: {
+        code: "500",
+        message: "Internal server error in image sampler proxy",
         details: error.message,
       },
     });

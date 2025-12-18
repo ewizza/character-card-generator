@@ -445,9 +445,26 @@
                 </div>
 
                 <div class="form-group">
-                    <label for="image-size" class="label">Image Size (optional)</label>
-                    <input type="text" id="image-size" class="input"
-                        placeholder="e.g., 1024x1024, 512x512 (optional)" />
+                    <label class="label">Image Size (optional)</label>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+                        <div>
+                            <label for="image-width" class="label" style="font-size: 0.75rem;">Width</label>
+                            <input type="number" id="image-width" class="input" min="64" max="2048" step="64"
+                                placeholder="1024" />
+                        </div>
+                        <div>
+                            <label for="image-height" class="label" style="font-size: 0.75rem;">Height</label>
+                            <input type="number" id="image-height" class="input" min="64" max="2048" step="64"
+                                placeholder="1024" />
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="image-sampler" class="label">Sampler</label>
+                    <select id="image-sampler" class="input" style="height: 3rem;">
+                        <option value="Euler">Euler</option>
+                    </select>
                 </div>
 
                 <!-- API Key Persistence Toggle -->

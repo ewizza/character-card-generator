@@ -31,6 +31,7 @@ class CharacterGeneratorApp {
     this.config.saveToForm();
     this.bindEvents();
     this.checkAPIStatus();
+    this.loadImageSamplers();
   }
 
   bindEvents() {
@@ -162,7 +163,7 @@ class CharacterGeneratorApp {
 
     // Save API settings on input change
     const apiInputs = document.querySelectorAll(
-      "#text-api-base, #text-api-key, #text-model, #image-api-base, #image-api-key, #image-model",
+      "#text-api-base, #text-api-key, #text-model, #image-api-base, #image-api-key, #image-model, #image-width, #image-height, #image-sampler",
     );
     apiInputs.forEach((input) => {
       input.addEventListener("change", () => this.saveAPISettings());
@@ -222,6 +223,7 @@ class CharacterGeneratorApp {
     apiSettingsBtn.addEventListener("click", () => {
       modalOverlay.classList.add("show");
       document.body.style.overflow = "hidden"; // Prevent background scrolling
+      this.loadImageSamplers();
     });
 
     // Close modal function
@@ -272,6 +274,46 @@ class CharacterGeneratorApp {
     this.config.loadFromForm();
     this.config.saveConfig();
     this.checkAPIStatus();
+    this.loadImageSamplers();
+  }
+
+  async loadImageSamplers() {
+    const samplerSelect = document.getElementById("image-sampler");
+    if (!samplerSelect) return;
+
+    const fallbackSamplers = ["Euler"];
+    const selectedSampler = this.config.get("api.image.sampler") || "Euler";
+
+    const setSamplerOptions = (options) => {
+      const uniqueOptions = Array.from(new Set(options.filter(Boolean)));
+      const finalOptions =
+        uniqueOptions.length > 0 ? uniqueOptions : fallbackSamplers;
+
+      samplerSelect.innerHTML = "";
+      finalOptions.forEach((name) => {
+        const option = document.createElement("option");
+        option.value = name;
+        option.textContent = name;
+        samplerSelect.appendChild(option);
+      });
+
+      samplerSelect.value = finalOptions.includes(selectedSampler)
+        ? selectedSampler
+        : finalOptions[0];
+
+      if (samplerSelect.value !== this.config.get("api.image.sampler")) {
+        this.config.set("api.image.sampler", samplerSelect.value);
+      }
+    };
+
+    try {
+      const samplers = await this.apiHandler.getImageSamplers();
+      const normalized = Array.isArray(samplers) ? samplers : [];
+      setSamplerOptions(normalized);
+    } catch (error) {
+      console.warn("Failed to load samplers:", error);
+      setSamplerOptions(fallbackSamplers);
+    }
   }
 
   async handleAPIConfig() {

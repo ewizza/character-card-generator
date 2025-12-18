@@ -58,7 +58,9 @@ class Config {
           baseUrl: "",
           apiKey: "",
           model: "",
-          size: "",
+          width: 1024,
+          height: 1024,
+          sampler: "Euler",
           timeout: 60000,
         },
       },
@@ -98,6 +100,7 @@ class Config {
         const saved = JSON.parse(savedConfig);
         this.stripPersistedApiKeys(saved);
         this.config = this.deepMerge(this.config, saved);
+        this.migrateLegacyImageSize();
         this.logRedacted("Loaded config from storage:", saved);
       } catch (error) {
         console.warn("Failed to load saved config:", error);
@@ -130,13 +133,27 @@ class Config {
       ?.value?.trim();
     const imageApiKey = document.getElementById("image-api-key")?.value?.trim();
     const imageModel = document.getElementById("image-model")?.value?.trim();
-    const imageSize = document.getElementById("image-size")?.value?.trim();
+    const imageWidth = document.getElementById("image-width")?.value?.trim();
+    const imageHeight = document.getElementById("image-height")?.value?.trim();
+    const imageSampler = document.getElementById("image-sampler")?.value?.trim();
 
     if (imageBaseUrl !== undefined)
       this.config.api.image.baseUrl = imageBaseUrl;
     if (imageApiKey !== undefined) this.config.api.image.apiKey = imageApiKey;
     if (imageModel !== undefined) this.config.api.image.model = imageModel;
-    if (imageSize !== undefined) this.config.api.image.size = imageSize;
+    if (imageWidth !== undefined) {
+      this.config.api.image.width = this.normalizeImageDimension(
+        imageWidth,
+        this.config.api.image.width,
+      );
+    }
+    if (imageHeight !== undefined) {
+      this.config.api.image.height = this.normalizeImageDimension(
+        imageHeight,
+        this.config.api.image.height,
+      );
+    }
+    if (imageSampler !== undefined) this.config.api.image.sampler = imageSampler;
 
     // Load toggle states
     const persistApiKeys = document.getElementById("persist-api-keys")?.checked;
@@ -190,13 +207,20 @@ class Config {
       const imageBaseUrl = document.getElementById("image-api-base");
       const imageApiKey = document.getElementById("image-api-key");
       const imageModel = document.getElementById("image-model");
-      const imageSize = document.getElementById("image-size");
+      const imageWidth = document.getElementById("image-width");
+      const imageHeight = document.getElementById("image-height");
+      const imageSampler = document.getElementById("image-sampler");
 
       if (imageBaseUrl)
         imageBaseUrl.value = this.config.api.image.baseUrl || "";
       if (imageApiKey) imageApiKey.value = this.config.api.image.apiKey || "";
       if (imageModel) imageModel.value = this.config.api.image.model || "";
-      if (imageSize) imageSize.value = this.config.api.image.size || "";
+      if (imageWidth)
+        imageWidth.value = this.config.api.image.width || 1024;
+      if (imageHeight)
+        imageHeight.value = this.config.api.image.height || 1024;
+      if (imageSampler)
+        imageSampler.value = this.config.api.image.sampler || "Euler";
 
       // Save toggle states
       const persistApiKeys = document.getElementById("persist-api-keys");
@@ -228,6 +252,32 @@ class Config {
       });
     }
     return output;
+  }
+
+  normalizeImageDimension(value, fallback = 1024) {
+    const parsed = parseInt(value, 10);
+    if (!Number.isFinite(parsed)) return fallback;
+    const clamped = Math.min(2048, Math.max(64, parsed));
+    return Math.round(clamped / 64) * 64;
+  }
+
+  migrateLegacyImageSize() {
+    const imageConfig = this.config?.api?.image;
+    if (!imageConfig) return;
+
+    if (imageConfig.size && (!imageConfig.width || !imageConfig.height)) {
+      const match = imageConfig.size
+        .toLowerCase()
+        .match(/(\d+)\s*x\s*(\d+)/);
+      if (match) {
+        imageConfig.width = this.normalizeImageDimension(match[1], 1024);
+        imageConfig.height = this.normalizeImageDimension(match[2], 1024);
+      }
+    }
+
+    if (imageConfig.size) {
+      delete imageConfig.size;
+    }
   }
 
   isObject(item) {
