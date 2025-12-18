@@ -71,6 +71,10 @@ class Config {
         persistApiKeys: false,
         enableImageGeneration: true,
       },
+      prompts: {
+        selectedPresetId: "third_person",
+        customPresets: {},
+      },
     };
   }
 

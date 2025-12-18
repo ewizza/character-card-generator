@@ -11,6 +11,7 @@ COPY .docker/nginx/nginx-frontend.conf /etc/nginx/nginx.conf
 COPY src/ /usr/share/nginx/html/src/
 COPY index.html /usr/share/nginx/html/
 COPY favicon.png /usr/share/nginx/html/
+COPY public/ /usr/share/nginx/html/public/
 
 # Set permissions
 RUN chmod -R 755 /usr/share/nginx/html

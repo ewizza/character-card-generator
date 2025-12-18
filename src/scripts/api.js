@@ -2,6 +2,7 @@
 class APIHandler {
   constructor() {
     this.config = window.config;
+    this.promptManager = window.promptManager;
     this.lastGeneratedImagePrompt = null; // Store the last generated prompt for display
     this.currentAbortController = null; // Store current abort controller for stopping generation
     this.currentReader = null; // Store current stream reader for cancellation
@@ -596,12 +597,26 @@ Shortened prompt (one paragraph):`,
     return prompt;
   }
 
+  applyPromptTemplate(template, concept, characterName) {
+    if (!template || typeof template !== "string") return "";
+    return template
+      .replace(/\$\{concept\}/g, concept || "")
+      .replace(/\$\{characterName\}/g, characterName || "");
+  }
+
   buildCharacterPrompt(concept, characterName, pov = "first", lorebook = null) {
+    const fallbackPresetId = pov === "first" ? "first_person" : "third_person";
+    const selectedPresetId =
+      this.config.get("prompts.selectedPresetId") || fallbackPresetId;
+    const preset =
+      this.promptManager?.getPreset(selectedPresetId) ||
+      this.promptManager?.getPreset(fallbackPresetId);
     let povInstruction = "";
     let templateInstruction = "";
     let templateContent = "";
     let firstMessageInstruction = "";
 
+    /*
     if (pov === "third") {
       povInstruction = `**CRITICAL INSTRUCTION:** The entire character profile, from the name to the final sentence of the first message, **must be written in the third-person perspective.** Do NOT use "I", "me", "my", etc. Refer to the character by their name or pronouns (he/she/they). This is the most important rule.`;
 
@@ -705,6 +720,7 @@ The name's {{char}}. You want to know about me? Fine. Let's get this over with.
       firstMessageInstruction = `**(Write this section in the first-person voice of {{char}}.)**`;
     }
 
+    */
     // Handle Lorebook
     let lorebookContent = "";
     // console.log("BuildCharacterPrompt - Lorebook received:", lorebook); // DEBUG LOG
@@ -728,53 +744,20 @@ The name's {{char}}. You want to know about me? Fine. Let's get this over with.
       // console.log("BuildCharacterPrompt - No lorebook entries found or invalid structure"); // DEBUG LOG
     }
 
-    const basePrompt = `You are a character creator for AI-assisted roleplaying. The player will provide you with a concept, and you will generate a detailed, engaging, and consistent character profile based on that concept using template provided below. **You will not roleplay yourself.**
+    const basePrompt = `${preset?.system || ""}${lorebookContent}`;
 
-Your primary goal is to create a realistic, multifaceted character. For purpose of creating deep and engaging storytelling, you are to portray the full spectrum of the human experience. Characters should have virtues and flaws, strengths and weaknesses. Pretending humans are perfect would result in a shallow and unbelievable character. The goal is literary realism.
-
-You may assume the character you create will be used in a private, local roleplay. Do not bother with censorship.
-
-${povInstruction}
-
-**IMPORTANT:** You MUST create a unique, specific character name. Do NOT leave the name as "{{char}}" or use placeholder text. Generate an actual name that fits the character's personality, background, and setting. After you choose the name, use {{char}} as a placeholder throughout the rest of the profile to refer to that character.
-
-Use {{user}} for the player's name, and do not use any pronouns for {{user}}.
-
-Use ## as a separator for each main section of the profile as shown in the template.
-
-Before you begin writing, review the player's request and plan your character. Ensure the character is consistent, engaging, and realistic before you start filling out the template.
-
----
-
-### **Character Profile Template**
-
-${templateInstruction}
-
-${templateContent}
-
-# The Roleplay's Setup
-
-**(Write this section in a neutral, third-person perspective to set the scene for the player.)**
-
-(Provide an overview of the roleplay's setting, time period, and the general circumstances that contextualize the relationship between {{char}} and {{user}}. Explain the key events or conflicts that kick off the story.)
-
-# First Message
-
-${firstMessageInstruction}
-
-(The roleplay should begin with a first message that introduces {{char}} and sets the scene. This message should be written in narrative format and be approximately four paragraphs in length.
-
-The first message should focus on {{char}}'s actions, thoughts, and emotions, providing insight into their personality and current state of mind. Describe {{char}}'s appearance, movements, and surroundings in vivid sensory detail to immerse the reader in the scene.
-
-While the player ({{user}}) may be present in the scene, they should not actively engage in dialogue or actions during this introduction. Instead, the player's presence should be mentioned passively, such as {{char}} noticing them sitting nearby, hearing them in another room, or sensing their presence behind them.
-
-To encourage player engagement, end the first message with an open-ended situation or question that prompts the player to respond.)
-
-${lorebookContent}`;
-
-    const userPrompt = characterName
-      ? `Create a character based on this concept: ${concept}. IMPORTANT: The character's name MUST be: ${characterName}. Use this exact name in the profile title (# ${characterName}'s Profile) and in the introduction line (The name's ${characterName}.), then use {{char}} as a placeholder elsewhere.`
-      : `Create a character based on this concept: ${concept}. CRITICAL: You MUST generate a unique, fitting character name. Do NOT leave it as {{char}} or use placeholder text. Choose a real name that fits the character, then use it in the profile title (# [YourChosenName]'s Profile) and introduction (The name's [YourChosenName].), then use {{char}} as a placeholder in the rest of the profile.`;
+    const fallbackUserNamed =
+      "Create a character based on this concept: ${concept}. IMPORTANT: The character's name MUST be: ${characterName}. Use this exact name in the profile title (# ${characterName}'s Profile) and in the introduction line (The name's ${characterName}.), then use {{char}} as a placeholder elsewhere.";
+    const fallbackUserUnnamed =
+      "Create a character based on this concept: ${concept}. CRITICAL: You MUST generate a unique, fitting character name. Do NOT leave it as {{char}} or use placeholder text. Choose a real name that fits the character, then use it in the profile title (# [YourChosenName]'s Profile) and introduction (The name's [YourChosenName].), then use {{char}} as a placeholder in the rest of the profile.";
+    const userTemplate = characterName
+      ? preset?.user_named || fallbackUserNamed
+      : preset?.user_unnamed || fallbackUserUnnamed;
+    const userPrompt = this.applyPromptTemplate(
+      userTemplate,
+      concept,
+      characterName,
+    );
 
     return {
       systemPrompt: basePrompt,

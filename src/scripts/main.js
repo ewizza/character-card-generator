@@ -6,6 +6,7 @@ class CharacterGeneratorApp {
     this.pngEncoder = window.pngEncoder;
     this.config = window.config;
     this.apiHandler = window.apiHandler;
+    this.promptManager = window.promptManager;
 
     this.currentCharacter = null;
     this.originalCharacter = null; // Store the original AI-generated version
@@ -28,8 +29,10 @@ class CharacterGeneratorApp {
     }
 
     await this.config.waitForConfig();
+    await this.promptManager.loadDefaults();
     this.config.saveToForm();
     this.bindEvents();
+    this.initPromptPresets();
     this.checkAPIStatus();
     this.loadImageSamplers();
   }
@@ -143,6 +146,14 @@ class CharacterGeneratorApp {
     lorebookInput.addEventListener("change", (e) =>
       this.handleLorebookUpload(e),
     );
+
+    // POV selection should sync to prompt presets
+    const povSelect = document.getElementById("pov-select");
+    if (povSelect) {
+      povSelect.addEventListener("change", () =>
+        this.handlePovPresetChange(),
+      );
+    }
 
     // Debug mode toggle
     const debugModeCheckbox = document.getElementById("debug-mode");
@@ -314,6 +325,313 @@ class CharacterGeneratorApp {
       console.warn("Failed to load samplers:", error);
       setSamplerOptions(fallbackSamplers);
     }
+  }
+
+  initPromptPresets() {
+    this.promptPresetSelect = document.getElementById("prompt-preset-select");
+    if (!this.promptPresetSelect) return;
+
+    this.promptPresetNameInput = document.getElementById("prompt-preset-name");
+    this.promptPresetPovSelect = document.getElementById("prompt-preset-pov");
+    this.promptPresetPovWrapper = document.getElementById(
+      "prompt-preset-pov-wrapper",
+    );
+    this.promptPresetSystem = document.getElementById(
+      "prompt-preset-system",
+    );
+    this.promptPresetUserNamed = document.getElementById(
+      "prompt-preset-user-named",
+    );
+    this.promptPresetUserUnnamed = document.getElementById(
+      "prompt-preset-user-unnamed",
+    );
+    this.promptPresetNewBtn = document.getElementById("prompt-preset-new");
+    this.promptPresetDuplicateBtn = document.getElementById(
+      "prompt-preset-duplicate",
+    );
+    this.promptPresetSaveBtn = document.getElementById("prompt-preset-save");
+    this.promptPresetDeleteBtn = document.getElementById("prompt-preset-delete");
+    this.promptPresetResetBtn = document.getElementById("prompt-preset-reset");
+    this.promptPresetMessage = document.getElementById("prompt-preset-message");
+
+    this.bindPromptPresetEvents();
+    this.refreshPromptPresetOptions();
+
+    const presetIds = new Set(
+      this.promptManager.listPresets().map((preset) => preset.id),
+    );
+    let selectedId =
+      this.config.get("prompts.selectedPresetId") || "third_person";
+    if (!presetIds.has(selectedId)) {
+      selectedId = "third_person";
+      this.config.set("prompts.selectedPresetId", selectedId);
+    }
+
+    this.loadPromptPresetIntoEditor(selectedId);
+  }
+
+  bindPromptPresetEvents() {
+    if (this.promptPresetSelect) {
+      this.promptPresetSelect.addEventListener("change", () => {
+        const presetId = this.promptPresetSelect.value;
+        this.config.set("prompts.selectedPresetId", presetId);
+        this.loadPromptPresetIntoEditor(presetId);
+      });
+    }
+
+    if (this.promptPresetNewBtn) {
+      this.promptPresetNewBtn.addEventListener("click", () =>
+        this.handlePromptPresetNew(),
+      );
+    }
+    if (this.promptPresetDuplicateBtn) {
+      this.promptPresetDuplicateBtn.addEventListener("click", () =>
+        this.handlePromptPresetDuplicate(),
+      );
+    }
+    if (this.promptPresetSaveBtn) {
+      this.promptPresetSaveBtn.addEventListener("click", () =>
+        this.handlePromptPresetSave(),
+      );
+    }
+    if (this.promptPresetDeleteBtn) {
+      this.promptPresetDeleteBtn.addEventListener("click", () =>
+        this.handlePromptPresetDelete(),
+      );
+    }
+    if (this.promptPresetResetBtn) {
+      this.promptPresetResetBtn.addEventListener("click", () =>
+        this.handlePromptPresetReset(),
+      );
+    }
+  }
+
+  refreshPromptPresetOptions() {
+    if (!this.promptPresetSelect) return;
+    const presets = this.promptManager.listPresets();
+    const selectedId = this.config.get("prompts.selectedPresetId");
+
+    this.promptPresetSelect.innerHTML = "";
+    presets.forEach((preset) => {
+      const option = document.createElement("option");
+      option.value = preset.id;
+      option.textContent = preset.name || preset.id;
+      this.promptPresetSelect.appendChild(option);
+    });
+
+    if (selectedId && presets.some((preset) => preset.id === selectedId)) {
+      this.promptPresetSelect.value = selectedId;
+    } else if (presets[0]) {
+      this.promptPresetSelect.value = presets[0].id;
+      this.config.set("prompts.selectedPresetId", presets[0].id);
+    }
+  }
+
+  loadPromptPresetIntoEditor(presetId) {
+    const preset = this.promptManager.getPreset(presetId);
+    if (!preset) return;
+
+    if (this.promptPresetSelect) {
+      this.promptPresetSelect.value = preset.id;
+    }
+    if (this.promptPresetNameInput) {
+      this.promptPresetNameInput.value = preset.name || "";
+      this.promptPresetNameInput.readOnly = !!preset.locked;
+    }
+    if (this.promptPresetPovSelect) {
+      this.promptPresetPovSelect.value = preset.pov || "first";
+    }
+    if (this.promptPresetPovWrapper) {
+      this.promptPresetPovWrapper.style.display = preset.locked
+        ? "none"
+        : "block";
+    }
+    if (this.promptPresetSystem) {
+      this.promptPresetSystem.value = preset.system || "";
+    }
+    if (this.promptPresetUserNamed) {
+      this.promptPresetUserNamed.value = preset.user_named || "";
+    }
+    if (this.promptPresetUserUnnamed) {
+      this.promptPresetUserUnnamed.value = preset.user_unnamed || "";
+    }
+
+    if (this.promptPresetDeleteBtn) {
+      this.promptPresetDeleteBtn.disabled = !!preset.locked;
+      this.promptPresetDeleteBtn.style.display = preset.locked
+        ? "none"
+        : "inline-flex";
+    }
+    if (this.promptPresetResetBtn) {
+      this.promptPresetResetBtn.disabled = !preset.locked;
+      this.promptPresetResetBtn.style.display = preset.locked
+        ? "inline-flex"
+        : "none";
+    }
+
+    this.syncPovSelectWithPreset(preset);
+    this.setPromptPresetMessage("");
+  }
+
+  syncPovSelectWithPreset(preset) {
+    const povSelect = document.getElementById("pov-select");
+    if (!povSelect || !preset) return;
+    povSelect.value = preset.pov === "third" ? "third" : "first";
+  }
+
+  handlePovPresetChange() {
+    const povSelect = document.getElementById("pov-select");
+    if (!povSelect) return;
+    const presetId =
+      povSelect.value === "third" ? "third_person" : "first_person";
+    this.config.set("prompts.selectedPresetId", presetId);
+    this.refreshPromptPresetOptions();
+    this.loadPromptPresetIntoEditor(presetId);
+  }
+
+  getPromptPresetEditorValues() {
+    return {
+      name: this.promptPresetNameInput?.value?.trim() || "",
+      pov: this.promptPresetPovSelect?.value || "first",
+      system: this.promptPresetSystem?.value || "",
+      user_named: this.promptPresetUserNamed?.value || "",
+      user_unnamed: this.promptPresetUserUnnamed?.value || "",
+    };
+  }
+
+  handlePromptPresetNew() {
+    const currentId = this.promptPresetSelect?.value;
+    const basePreset = this.promptManager.getPreset(currentId);
+    const timestamp = Date.now();
+    const preset = {
+      id: `custom_${timestamp}`,
+      name: "New Preset",
+      locked: false,
+      pov: basePreset?.pov || "first",
+      system: basePreset?.system || "",
+      user_named: basePreset?.user_named || "",
+      user_unnamed: basePreset?.user_unnamed || "",
+    };
+    const saved = this.promptManager.saveCustomPreset(preset);
+    if (!saved) return;
+    this.config.set("prompts.selectedPresetId", saved.id);
+    this.refreshPromptPresetOptions();
+    this.loadPromptPresetIntoEditor(saved.id);
+    this.setPromptPresetMessage("New preset created.", "success");
+  }
+
+  handlePromptPresetDuplicate() {
+    const values = this.getPromptPresetEditorValues();
+    const validation = this.promptManager.validateSystemPrompt(values.system);
+    if (!validation.valid) {
+      this.setPromptPresetMessage(
+        `System prompt missing required headers: ${validation.missing.join(
+          ", ",
+        )}`,
+        "error",
+      );
+      return;
+    }
+    const timestamp = Date.now();
+    const baseName = values.name || "Custom Preset";
+    const preset = {
+      id: `custom_${timestamp}`,
+      name: `${baseName} Copy`,
+      locked: false,
+      pov: values.pov,
+      system: values.system,
+      user_named: values.user_named,
+      user_unnamed: values.user_unnamed,
+    };
+    const saved = this.promptManager.saveCustomPreset(preset);
+    if (!saved) return;
+    this.config.set("prompts.selectedPresetId", saved.id);
+    this.refreshPromptPresetOptions();
+    this.loadPromptPresetIntoEditor(saved.id);
+    this.setPromptPresetMessage("Preset duplicated.", "success");
+  }
+
+  handlePromptPresetSave() {
+    const currentId = this.promptPresetSelect?.value;
+    const existing = this.promptManager.getPreset(currentId);
+    const values = this.getPromptPresetEditorValues();
+    const validation = this.promptManager.validateSystemPrompt(values.system);
+
+    if (!validation.valid) {
+      this.setPromptPresetMessage(
+        `System prompt missing required headers: ${validation.missing.join(
+          ", ",
+        )}`,
+        "error",
+      );
+      return;
+    }
+
+    const timestamp = Date.now();
+    const isLocked = existing?.locked;
+    const baseName = values.name || existing?.name || "Custom Preset";
+    const preset = {
+      id: isLocked ? `custom_${timestamp}` : currentId,
+      name: isLocked ? `${baseName} Copy` : baseName,
+      locked: false,
+      pov: values.pov,
+      system: values.system,
+      user_named: values.user_named,
+      user_unnamed: values.user_unnamed,
+    };
+
+    const saved = this.promptManager.saveCustomPreset(preset);
+    if (!saved) return;
+    this.config.set("prompts.selectedPresetId", saved.id);
+    this.refreshPromptPresetOptions();
+    this.loadPromptPresetIntoEditor(saved.id);
+    this.setPromptPresetMessage(
+      isLocked ? "Preset saved as a copy." : "Preset saved.",
+      "success",
+    );
+  }
+
+  handlePromptPresetDelete() {
+    const currentId = this.promptPresetSelect?.value;
+    const preset = this.promptManager.getPreset(currentId);
+    if (!preset || preset.locked) return;
+
+    if (!confirm(`Delete preset "${preset.name}"?`)) {
+      return;
+    }
+
+    if (this.promptManager.deleteCustomPreset(currentId)) {
+      const fallbackId = this.config.get("prompts.selectedPresetId");
+      this.refreshPromptPresetOptions();
+      this.loadPromptPresetIntoEditor(fallbackId);
+      this.setPromptPresetMessage("Preset deleted.", "success");
+    }
+  }
+
+  handlePromptPresetReset() {
+    const currentId = this.promptPresetSelect?.value;
+    const preset = this.promptManager.getPreset(currentId);
+    if (!preset || !preset.locked) return;
+    this.loadPromptPresetIntoEditor(currentId);
+    this.setPromptPresetMessage("Preset reset to defaults.", "info");
+  }
+
+  setPromptPresetMessage(message, type = "info") {
+    if (!this.promptPresetMessage) return;
+    if (!message) {
+      this.promptPresetMessage.textContent = "";
+      this.promptPresetMessage.style.color = "var(--text-secondary)";
+      return;
+    }
+
+    const colors = {
+      success: "var(--success)",
+      error: "var(--error)",
+      warning: "#ffc107",
+      info: "var(--text-secondary)",
+    };
+    this.promptPresetMessage.textContent = message;
+    this.promptPresetMessage.style.color = colors[type] || colors.info;
   }
 
   async handleAPIConfig() {
@@ -1415,6 +1733,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   if (
     !window.config ||
     !window.apiHandler ||
+    !window.promptManager ||
     !window.characterGenerator ||
     !window.imageGenerator ||
     !window.pngEncoder
@@ -1422,6 +1741,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     console.error("Missing modules:", {
       config: !!window.config,
       apiHandler: !!window.apiHandler,
+      promptManager: !!window.promptManager,
       characterGenerator: !!window.characterGenerator,
       imageGenerator: !!window.imageGenerator,
       pngEncoder: !!window.pngEncoder,
