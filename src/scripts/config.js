@@ -61,6 +61,8 @@ class Config {
           width: 1024,
           height: 1024,
           sampler: "Euler",
+          steps: 28,
+          cfgScale: 7,
           timeout: 60000,
         },
       },
@@ -124,10 +126,16 @@ class Config {
     const textBaseUrl = document.getElementById("text-api-base")?.value?.trim();
     const textApiKey = document.getElementById("text-api-key")?.value?.trim();
     const textModel = document.getElementById("text-model")?.value?.trim();
+    const imageSteps = document.getElementById("image-steps")?.value?.trim();
+    const imageCfgScale = document.getElementById("image-cfg-scale")?.value?.trim();
+
 
     if (textBaseUrl !== undefined) this.config.api.text.baseUrl = textBaseUrl;
     if (textApiKey !== undefined) this.config.api.text.apiKey = textApiKey;
     if (textModel !== undefined) this.config.api.text.model = textModel;
+    if (imageSteps !== undefined) this.config.api.image.steps = this.normalizeSteps(imageSteps, this.config.api.image.steps);
+    if (imageCfgScale !== undefined) this.config.api.image.cfgScale = this.normalizeCfgScale(imageCfgScale, this.config.api.image.cfgScale);
+
 
     // No special handling needed when using proxy server
 
@@ -158,6 +166,20 @@ class Config {
       );
     }
     if (imageSampler !== undefined) this.config.api.image.sampler = imageSampler;
+
+    if (imageSteps !== undefined) {
+      this.config.api.image.steps = this.normalizeSteps(
+        imageSteps,
+        this.config.api.image.steps,
+      );
+    }
+
+if (imageCfgScale !== undefined) {
+      this.config.api.image.cfgScale = this.normalizeCfgScale(
+        imageCfgScale,
+        this.config.api.image.cfgScale,
+      );
+    }
 
     // Load toggle states
     const persistApiKeys = document.getElementById("persist-api-keys")?.checked;
@@ -214,9 +236,12 @@ class Config {
       const imageWidth = document.getElementById("image-width");
       const imageHeight = document.getElementById("image-height");
       const imageSampler = document.getElementById("image-sampler");
+      const imageSteps = document.getElementById("image-steps");
+      const imageCfgScale = document.getElementById("image-cfg-scale");
 
-      if (imageBaseUrl)
-        imageBaseUrl.value = this.config.api.image.baseUrl || "";
+      if (imageSteps) imageSteps.value = this.config.api.image.steps ?? 28;
+      if (imageCfgScale) imageCfgScale.value = this.config.api.image.cfgScale ?? 7;
+      if (imageBaseUrl) imageBaseUrl.value = this.config.api.image.baseUrl || "";
       if (imageApiKey) imageApiKey.value = this.config.api.image.apiKey || "";
       if (imageModel) imageModel.value = this.config.api.image.model || "";
       if (imageWidth)
@@ -264,6 +289,19 @@ class Config {
     const clamped = Math.min(2048, Math.max(64, parsed));
     return Math.round(clamped / 64) * 64;
   }
+
+  normalizeSteps(value, fallback = 28) {
+    const parsed = parseInt(value, 10);
+    if (!Number.isFinite(parsed)) return fallback;
+    return Math.min(150, Math.max(1, parsed));
+  }
+
+normalizeCfgScale(value, fallback = 7) {
+    const parsed = parseFloat(value);
+    if (!Number.isFinite(parsed)) return fallback;
+    return Math.min(30, Math.max(1, parsed));
+  }
+
 
   migrateLegacyImageSize() {
     const imageConfig = this.config?.api?.image;

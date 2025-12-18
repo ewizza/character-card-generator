@@ -355,6 +355,16 @@ class APIHandler {
         : "sampler";
       data[samplerKey] = sampler;
     }
+        const steps = parseInt(this.config.get("api.image.steps"), 10);
+    if (Number.isFinite(steps)) {
+      data.steps = steps;
+    }
+
+    const cfgScale = parseFloat(this.config.get("api.image.cfgScale"));
+    if (Number.isFinite(cfgScale)) {
+      data.cfg_scale = cfgScale;
+    }
+
     const endpoint = "/api/image/generations";
 
     const response = await this.makeRequest(endpoint, data, true);

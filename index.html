@@ -467,6 +467,22 @@
                         <option value="Euler">Euler</option>
                     </select>
                 </div>
+                <div class="form-group">
+                    <label class="label">Image Quality</label>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+                        <div>
+                        <label for="image-steps" class="label" style="font-size: 0.75rem;">Steps</label>
+                        <input type="number" id="image-steps" class="input"
+                            min="1" max="150" step="1" placeholder="28" />
+                        </div>
+                        <div>
+                        <label for="image-cfg-scale" class="label" style="font-size: 0.75rem;">CFG Scale</label>
+                        <input type="number" id="image-cfg-scale" class="input"
+                            min="1" max="30" step="0.5" placeholder="7" />
+                        </div>
+                    </div>
+                </div>
+
 
                 <!-- API Key Persistence Toggle -->
                 <div class="form-group">

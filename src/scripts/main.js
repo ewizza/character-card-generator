@@ -174,8 +174,9 @@ class CharacterGeneratorApp {
 
     // Save API settings on input change
     const apiInputs = document.querySelectorAll(
-      "#text-api-base, #text-api-key, #text-model, #image-api-base, #image-api-key, #image-model, #image-width, #image-height, #image-sampler",
+      "#text-api-base, #text-api-key, #text-model, #image-api-base, #image-api-key, #image-model, #image-width, #image-height, #image-sampler, #image-steps, #image-cfg-scale"
     );
+
     apiInputs.forEach((input) => {
       input.addEventListener("change", () => this.saveAPISettings());
     });
