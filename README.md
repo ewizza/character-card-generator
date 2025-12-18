@@ -5,7 +5,7 @@
 A web application for creating character cards for SillyTavern. It uses AI models to generate character profiles, including personalities, scenarios, and custom artwork.
 
 > [!IMPORTANT]
-> This application requires OpenAI-compatible API endpoints for both text and image generation. It works with OpenAI, OpenRouter, and other services that implement the OpenAI API format.
+> This application requires OpenAI-compatible API endpoint for text and is **modified** to use **koboldCPP image generation** with an openai fallback. It works with OpenAI, OpenRouter, and other services that implement the OpenAI API format **but this branch is designed to use koboldCPP as the backend for both LLM and image generation**.
 
 ## Core Capabilities
 
@@ -13,7 +13,7 @@ A web application for creating character cards for SillyTavern. It uses AI model
 The generator uses AI to create character profiles based on user input. It generates backstories, personality traits, and opening scenarios. The application supports streaming output, displaying the character generation in real-time.
 
 ### Image Generation
-The application includes an image generation feature that creates prompts based on the character's description. The tool automatically optimizes prompts for the selected image generation model.
+The application includes an image generation feature that creates prompts based on the character's description. The tool automatically optimizes prompts for the selected image generation model. **NEW**: Seperate fields for image height and width and will now pull the list of available samplers into a dropdown with a default to euler if list not available. 
 
 **Image Generation Controls:**
 -   **Toggle Image Generation**: Enable or disable automatic image generation during character creation to manage API costs.
@@ -21,6 +21,7 @@ The application includes an image generation feature that creates prompts based 
 -   **Regenerate Image**: Create a new image using the current prompt.
 -   **Editable Prompts**: Manually edit image prompts (up to 1000 characters).
 -   **Upload Images**: Use custom artwork by uploading PNG or JPEG files.
+-   **Save Image**: Save current image in png format without card info. 
 
 ### Lore Integration
 The generator supports SillyTavern World Info files. This allows generated characters to incorporate specific world lore, ensuring consistency with custom settings.
