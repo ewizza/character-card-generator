@@ -7,6 +7,9 @@ A web application for creating character cards for SillyTavern. It uses AI model
 > [!IMPORTANT]
 > This application requires OpenAI-compatible API endpoints for both text and image generation. It works with OpenAI, OpenRouter, and other services that implement the OpenAI API format.
 
+[!NEW]
+Added functionality to change and save your prompts. Clone the defaults or create from scratch. Make changes and save/delete. Changes stored in local storage.
+[!Prompts admin](prompts.png)
 ## Core Capabilities
 
 ### Character Synthesis
