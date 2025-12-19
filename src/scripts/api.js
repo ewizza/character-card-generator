@@ -43,6 +43,53 @@ class APIHandler {
     return await response.json();
   }
 
+  async loadScript(url) {
+    return await new Promise((resolve, reject) => {
+      try {
+        const s = document.createElement("script");
+        s.src = url;
+        s.async = true;
+        s.onload = () => resolve(true);
+        s.onerror = () =>
+          reject(new Error(`Failed to load script: ${url}`));
+        document.head.appendChild(s);
+      } catch (e) {
+        reject(e);
+      }
+    });
+  }
+
+  // Ensure the ComfyUI bindings helper is available.
+  // In dev, users may hot-swap branches without a hard refresh, so index.html may not reload.
+  async ensureComfyBindingsLoaded() {
+    if (window.comfyWorkflow?.applyBindings) return;
+
+    // Try loading from both paths depending on how the frontend is served.
+    const candidates = [
+      // Normal static path
+      "src/scripts/comfy/applyBindings.js",
+      // If served behind an alias
+      "/src/scripts/comfy/applyBindings.js",
+    ];
+
+    let lastErr = null;
+    for (const c of candidates) {
+      try {
+        await this.loadScript(c);
+        if (window.comfyWorkflow?.applyBindings) return;
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+
+    throw new Error(
+      `ComfyUI bindings helper missing (window.comfyWorkflow.applyBindings).\n` +
+        `Try a hard refresh (Ctrl+F5) after switching branches, or ensure index.html includes:\n` +
+        `<script src=\"src/scripts/comfy/applyBindings.js\"></script>\n` +
+        (lastErr ? `Last load error: ${lastErr.message}` : ""),
+    );
+  }
+
   // Phase 1 (Piece 3b-1): load + bind workflow, submit to ComfyUI via proxy.
   // Polling + image fetch are implemented in the next pieces.
   async generateImageViaComfyUI(imagePrompt) {
@@ -99,11 +146,7 @@ class APIHandler {
       batchSize: 1,
     };
 
-    if (!window.comfyWorkflow?.applyBindings) {
-      throw new Error(
-        "ComfyUI bindings helper missing (window.comfyWorkflow.applyBindings).",
-      );
-    }
+    await this.ensureComfyBindingsLoaded();
 
     const boundWorkflow = window.comfyWorkflow.applyBindings(
       workflowTemplate,
