@@ -270,10 +270,42 @@ class APIHandler {
       pollMs: 1000,
     });
 
-    throw new Error(
-      `ComfyUI completed (prompt_id: ${promptId}). Output: ${out.filename} (subfolder: '${out.subfolder}', type: '${out.type}'). Image fetch is implemented in the next patch.`,
-    );
+        // Piece 3b-3: fetch the output image via /api/comfy/view and return a blob URL for display.
+    let imgBlob;
+    try {
+      imgBlob = await this.fetchComfyViewBlob(
+        comfyBaseUrl,
+        out.filename,
+        out.subfolder,
+        out.type,
+      );
+    } catch (e) {
+      throw new Error(`ComfyUI image fetch failed (prompt_id: ${promptId}): ${e.message}`);
+    }
+
+    const objectUrl = URL.createObjectURL(imgBlob);
+    return objectUrl;
   }
+  async fetchComfyViewBlob(comfyBaseUrl, filename, subfolder = "", type = "output") {
+    const qs = new URLSearchParams({
+      filename: filename,
+      subfolder: subfolder ?? "",
+      type: type ?? "output",
+    }).toString();
+
+    const resp = await fetch(`/api/comfy/view?${qs}`, {
+      method: "GET",
+      headers: { "X-API-URL": comfyBaseUrl },
+    });
+
+    if (!resp.ok) {
+      const t = await resp.text().catch(() => "");
+      throw new Error(`ComfyUI view failed (${resp.status}): ${t || resp.statusText}`);
+    }
+
+    return await resp.blob();
+  }
+
 
   async makeRequest(endpoint, data, isImageRequest = false, stream = false) {
     // Use proxy server to bypass browser API restrictions
