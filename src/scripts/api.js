@@ -201,6 +201,15 @@ class APIHandler {
     const cfgScale = parseFloat(this.config.get("api.image.cfgScale"));
 
     const values = {
+      // Optional SD checkpoint override (ComfyUI SD workflow only)
+      ckptName: (function () {
+        const fam = family || "sd_basic";
+        if (fam !== "sd_basic") return undefined;
+        const raw = this.config.get("api.image.comfyui.ckptName");
+        if (!raw) return undefined;
+        return String(raw).trim();
+      }).call(this),
+
       prompt: imagePrompt,
       negativePrompt: "",
       width: Number.isFinite(width) ? width : undefined,

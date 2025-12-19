@@ -174,7 +174,7 @@ class CharacterGeneratorApp {
 
     // Save API settings on input change
     const apiInputs = document.querySelectorAll(
-      "#text-api-base, #text-api-key, #text-model, #image-api-base, #image-api-key, #image-model, #image-provider, #comfyui-base-url, #comfyui-workflow-family, #image-width, #image-height, #image-sampler, #image-steps, #image-cfg-scale",
+      "#text-api-base, #text-api-key, #text-model, #image-api-base, #image-api-key, #image-model, #image-provider, #comfyui-base-url, #comfyui-workflow-family, #comfyui-checkpoint, #image-width, #image-height, #image-sampler, #image-steps, #image-cfg-scale",
     );
 
     apiInputs.forEach((input) => {
@@ -343,6 +343,79 @@ class CharacterGeneratorApp {
     } catch (error) {
       console.warn("Failed to load samplers:", error);
       setSamplerOptions(fallbackSamplers);
+    }
+  }
+
+  async loadComfyCheckpoints() {
+    const provider = document.getElementById("image-provider")?.value || "sdapi";
+    const family = document.getElementById("comfyui-workflow-family")?.value || "sd_basic";
+    const group = document.getElementById("comfyui-checkpoint-group");
+    const select = document.getElementById("comfyui-checkpoint");
+    if (!group || !select) return;
+
+    // Only show for ComfyUI + SD workflow
+    const shouldShow = provider === "comfyui" && family === "sd_basic";
+    group.style.display = shouldShow ? "block" : "none";
+    if (!shouldShow) return;
+
+    const comfyBaseUrl = document.getElementById("comfyui-base-url")?.value?.trim() || this.config.get("api.image.comfyui.baseUrl");
+    if (!comfyBaseUrl) {
+      select.innerHTML = '<option value="">Set ComfyUI Base URL to load checkpoints</option>';
+      return;
+    }
+
+    const current = this.config.get("api.image.comfyui.ckptName") || "";
+    select.innerHTML = '<option value="">Loading checkpoints…</option>';
+
+    try {
+      const resp = await fetch('/api/comfy/models/checkpoints', {
+        method: 'GET',
+        headers: { 'X-API-URL': comfyBaseUrl },
+      });
+      const text = await resp.text().catch(() => '');
+      if (!resp.ok) {
+        throw new Error(text || resp.statusText);
+      }
+
+      let data = null;
+      try { data = JSON.parse(text); } catch { data = null; }
+      let items = [];
+      if (Array.isArray(data)) items = data;
+      else if (data && Array.isArray(data.models)) items = data.models;
+      else if (data && Array.isArray(data.checkpoints)) items = data.checkpoints;
+
+      items = items.filter(Boolean).map(String);
+      items.sort((a,b) => a.localeCompare(b));
+
+      select.innerHTML = '';
+      const optDefault = document.createElement('option');
+      optDefault.value = '';
+      optDefault.textContent = '(use workflow default)';
+      select.appendChild(optDefault);
+
+      for (const name of items) {
+        const opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name;
+        select.appendChild(opt);
+      }
+
+      // Restore selection (even if missing)
+      if (current && !items.includes(current)) {
+        const opt = document.createElement('option');
+        opt.value = current;
+        opt.textContent = `⚠ missing: ${current}`;
+        select.appendChild(opt);
+      }
+      select.value = current;
+    } catch (e) {
+      console.warn('Failed to load ComfyUI checkpoints:', e);
+      select.innerHTML = '';
+      const opt = document.createElement('option');
+      opt.value = '';
+      opt.textContent = 'Failed to load checkpoints (see console)';
+      select.appendChild(opt);
+      select.value = '';
     }
   }
 

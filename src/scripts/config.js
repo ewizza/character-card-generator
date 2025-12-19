@@ -69,9 +69,11 @@ class Config {
           timeout: 60000,
 
           // ComfyUI settings (Phase 1 scaffolding)
+    // comfyuiCheckpoint saved below
           comfyui: {
             baseUrl: "http://127.0.0.1:8188",
             workflowFamily: "sd_basic",
+              ckptName: "",
           },
         },
       },
@@ -191,6 +193,7 @@ class Config {
     if (imageSampler !== undefined) this.config.api.image.sampler = imageSampler;
 
     // ComfyUI settings (Phase 1 scaffolding)
+    // comfyuiCheckpoint saved below
     if (comfyuiBaseUrl !== undefined && comfyuiBaseUrl) {
       this.config.api.image.comfyui.baseUrl = comfyuiBaseUrl;
     }

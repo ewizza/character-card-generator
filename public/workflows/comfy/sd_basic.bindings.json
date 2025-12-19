@@ -7,34 +7,70 @@
   },
   "map": {
     "prompt": [
-      { "node": "6", "input": "text" }
+      {
+        "node": "6",
+        "input": "text"
+      }
     ],
     "negativePrompt": [
-      { "node": "7", "input": "text" }
+      {
+        "node": "7",
+        "input": "text"
+      }
     ],
     "width": [
-      { "node": "5", "input": "width" }
+      {
+        "node": "5",
+        "input": "width"
+      }
     ],
     "height": [
-      { "node": "5", "input": "height" }
+      {
+        "node": "5",
+        "input": "height"
+      }
     ],
     "batchSize": [
-      { "node": "5", "input": "batch_size" }
+      {
+        "node": "5",
+        "input": "batch_size"
+      }
     ],
     "seed": [
-      { "node": "3", "input": "seed" }
+      {
+        "node": "3",
+        "input": "seed"
+      }
     ],
     "steps": [
-      { "node": "3", "input": "steps" }
+      {
+        "node": "3",
+        "input": "steps"
+      }
     ],
     "cfgScale": [
-      { "node": "3", "input": "cfg" }
+      {
+        "node": "3",
+        "input": "cfg"
+      }
     ],
     "sampler": [
-      { "node": "3", "input": "sampler_name" }
+      {
+        "node": "3",
+        "input": "sampler_name"
+      }
     ],
     "scheduler": [
-      { "node": "3", "input": "scheduler" }
+      {
+        "node": "3",
+        "input": "scheduler"
+      }
+    ],
+    "ckptName": [
+      {
+        "node": "4",
+        "input": "ckpt_name"
+      }
     ]
   },
   "defaults": {
@@ -46,6 +82,7 @@
     "cfgScale": 6,
     "sampler": "euler",
     "scheduler": "simple",
-    "seed": -1
+    "seed": -1,
+    "ckptName": ""
   }
 }
