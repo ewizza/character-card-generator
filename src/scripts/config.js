@@ -199,6 +199,9 @@ class Config {
     }
     if (comfyuiWorkflowFamily !== undefined && comfyuiWorkflowFamily) {
       this.config.api.image.comfyui.workflowFamily = comfyuiWorkflowFamily;
+    if (comfyuiCheckpoint !== undefined) {
+      this.config.api.image.comfyui.ckptName = comfyuiCheckpoint || "";
+    }
     }
 
     if (imageSteps !== undefined) {
@@ -298,6 +301,9 @@ if (imageCfgScale !== undefined) {
       if (comfyuiWorkflowFamily)
         comfyuiWorkflowFamily.value =
           this.config.api.image.comfyui?.workflowFamily || "sd_basic";
+      if (comfyuiCheckpoint)
+        comfyuiCheckpoint.value =
+          this.config.api.image.comfyui?.ckptName || "";
 
       // Save toggle states
       const persistApiKeys = document.getElementById("persist-api-keys");
