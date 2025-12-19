@@ -141,7 +141,13 @@ class APIHandler {
       height: Number.isFinite(height) ? height : undefined,
       steps: Number.isFinite(steps) ? steps : undefined,
       cfgScale: Number.isFinite(cfgScale) ? cfgScale : undefined,
-      sampler: this.config.get("api.image.sampler") || undefined,
+      // Sampler: let the workflow default stand unless a ComfyUI-specific sampler is set.
+      // (SDAPI sampler names are often Title Case, e.g. "Euler", which fails ComfyUI validation.)
+      sampler: (function () {
+        const raw = this.config.get("api.image.comfyui.sampler");
+        if (!raw) return undefined;
+        return String(raw).trim().toLowerCase();
+      }).call(this),
       // scheduler/seed use workflow defaults unless configured later
       batchSize: 1,
     };
