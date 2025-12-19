@@ -6,6 +6,135 @@ class APIHandler {
     this.lastGeneratedImagePrompt = null; // Store the last generated prompt for display
     this.currentAbortController = null; // Store current abort controller for stopping generation
     this.currentReader = null; // Store current stream reader for cancellation
+  
+    // ComfyUI client id (optional, but helps keep prompt submissions associated)
+    this.comfyClientId = this.getOrCreateComfyClientId();
+  }
+
+  // Persist a stable client id for ComfyUI submissions (helps ComfyUI track a client session).
+  getOrCreateComfyClientId() {
+    try {
+      const key = "comfyui_client_id";
+      const existing = localStorage.getItem(key);
+      if (existing && typeof existing === "string" && existing.length >= 8) {
+        return existing;
+      }
+      // Use crypto.randomUUID when available.
+      const created =
+        typeof crypto !== "undefined" && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `comfy_${Date.now()}_${Math.floor(Math.random() * 1e9)}`;
+      localStorage.setItem(key, created);
+      return created;
+    } catch {
+      // If localStorage is blocked, fall back to an in-memory id.
+      return `comfy_${Date.now()}_${Math.floor(Math.random() * 1e9)}`;
+    }
+  }
+
+  async loadJson(url) {
+    const response = await fetch(url, { method: "GET" });
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      throw new Error(
+        `Failed to load ${url} (${response.status}): ${text || response.statusText}`,
+      );
+    }
+    return await response.json();
+  }
+
+  // Phase 1 (Piece 3b-1): load + bind workflow, submit to ComfyUI via proxy.
+  // Polling + image fetch are implemented in the next pieces.
+  async generateImageViaComfyUI(imagePrompt) {
+    const comfyBaseUrl = this.config.get("api.image.comfyui.baseUrl");
+    if (!comfyBaseUrl) {
+      throw new Error(
+        "ComfyUI Base URL required. Please configure your ComfyUI Base URL in the image settings.",
+      );
+    }
+
+    const family =
+      this.config.get("api.image.comfyui.workflowFamily") || "sd_basic";
+
+    const workflowUrl = `/workflows/comfy/${family}.api.json`;
+    const bindingsUrl = `/workflows/comfy/${family}.bindings.json`;
+
+    const [workflowTemplate, bindings] = await Promise.all([
+      this.loadJson(workflowUrl),
+      this.loadJson(bindingsUrl),
+    ]);
+
+    const width = parseInt(this.config.get("api.image.width"), 10);
+    const height = parseInt(this.config.get("api.image.height"), 10);
+    const steps = parseInt(this.config.get("api.image.steps"), 10);
+    const cfgScale = parseFloat(this.config.get("api.image.cfgScale"));
+
+    const values = {
+      prompt: imagePrompt,
+      negativePrompt: "",
+      width: Number.isFinite(width) ? width : undefined,
+      height: Number.isFinite(height) ? height : undefined,
+      steps: Number.isFinite(steps) ? steps : undefined,
+      cfgScale: Number.isFinite(cfgScale) ? cfgScale : undefined,
+      sampler: this.config.get("api.image.sampler") || undefined,
+      // scheduler/seed use workflow defaults unless configured later
+      batchSize: 1,
+    };
+
+    if (!window.comfyWorkflow?.applyBindings) {
+      throw new Error(
+        "ComfyUI bindings helper missing (window.comfyWorkflow.applyBindings).",
+      );
+    }
+
+    const boundWorkflow = window.comfyWorkflow.applyBindings(
+      workflowTemplate,
+      bindings,
+      values,
+    );
+
+    const submitResponse = await fetch("/api/comfy/prompt", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-API-URL": comfyBaseUrl,
+      },
+      body: JSON.stringify({
+        prompt: boundWorkflow,
+        client_id: this.comfyClientId,
+      }),
+    });
+
+    const submitText = await submitResponse.text();
+    let submitJson = null;
+    try {
+      submitJson = JSON.parse(submitText);
+    } catch {
+      // ignore
+    }
+
+    if (!submitResponse.ok) {
+      const msg =
+        submitJson?.error?.message ||
+        submitJson?.message ||
+        submitResponse.statusText;
+      const details = submitJson?.error?.details || submitText;
+      throw new Error(
+        `ComfyUI submit failed (${submitResponse.status}): ${msg}\n${details}`,
+      );
+    }
+
+    const promptId = submitJson?.prompt_id;
+    if (!promptId) {
+      throw new Error(
+        `ComfyUI submit succeeded but no prompt_id was returned: ${submitText}`,
+      );
+    }
+
+    // Next pieces will: poll /api/comfy/history/:promptId and fetch /api/comfy/view.
+    throw new Error(
+      `ComfyUI submitted successfully (prompt_id: ${promptId}). Polling/image fetch is implemented in the next patch.`,
+    );
   }
 
   async makeRequest(endpoint, data, isImageRequest = false, stream = false) {
@@ -319,6 +448,11 @@ class APIHandler {
 
     // Store the prompt so it can be accessed later
     this.lastGeneratedImagePrompt = imagePrompt;
+
+    const provider = this.config.get("api.image.provider") || "sdapi";
+    if (provider === "comfyui") {
+      return await this.generateImageViaComfyUI(imagePrompt);
+    }
 
     const model = this.config.get("api.image.model");
     const apiUrl = this.config.get("api.image.baseUrl");

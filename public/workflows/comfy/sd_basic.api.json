@@ -31,7 +31,7 @@
   },
   "4": {
     "inputs": {
-      "ckpt_name": "v1-5-pruned-emaonly.safetensors"
+      "ckpt_name": "SD15\\duchaitenGoldenlife_v10.safetensors"
     },
     "class_type": "CheckpointLoaderSimple",
     "_meta": {
