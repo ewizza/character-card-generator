@@ -56,12 +56,30 @@ class APIHandler {
     const family =
       this.config.get("api.image.comfyui.workflowFamily") || "sd_basic";
 
-    const workflowUrl = `/workflows/comfy/${family}.api.json`;
-    const bindingsUrl = `/workflows/comfy/${family}.bindings.json`;
+    const workflowCandidates = [
+      `/workflows/comfy/${family}.api.json`,
+      `/public/workflows/comfy/${family}.api.json`,
+    ];
+    const bindingsCandidates = [
+      `/workflows/comfy/${family}.bindings.json`,
+      `/public/workflows/comfy/${family}.bindings.json`,
+    ];
+
+    const loadFirst = async (urls) => {
+      let lastErr = null;
+      for (const u of urls) {
+        try {
+          return await this.loadJson(u);
+        } catch (e) {
+          lastErr = e;
+        }
+      }
+      throw lastErr || new Error("Failed to load workflow assets");
+    };
 
     const [workflowTemplate, bindings] = await Promise.all([
-      this.loadJson(workflowUrl),
-      this.loadJson(bindingsUrl),
+      loadFirst(workflowCandidates),
+      loadFirst(bindingsCandidates),
     ]);
 
     const width = parseInt(this.config.get("api.image.width"), 10);
