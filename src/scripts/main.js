@@ -174,12 +174,30 @@ class CharacterGeneratorApp {
 
     // Save API settings on input change
     const apiInputs = document.querySelectorAll(
-      "#text-api-base, #text-api-key, #text-model, #image-api-base, #image-api-key, #image-model, #image-width, #image-height, #image-sampler, #image-steps, #image-cfg-scale"
+      "#text-api-base, #text-api-key, #text-model, #image-api-base, #image-api-key, #image-model, #image-provider, #comfyui-base-url, #comfyui-workflow-family, #image-width, #image-height, #image-sampler, #image-steps, #image-cfg-scale",
     );
 
     apiInputs.forEach((input) => {
       input.addEventListener("change", () => this.saveAPISettings());
     });
+
+    // Image provider toggle (Phase 1 scaffolding for ComfyUI)
+    const imageProviderSelect = document.getElementById("image-provider");
+    const comfyuiSettings = document.getElementById("comfyui-settings");
+    const updateImageProviderUI = () => {
+      const provider = imageProviderSelect?.value || "sdapi";
+      if (comfyuiSettings) {
+        comfyuiSettings.style.display = provider === "comfyui" ? "block" : "none";
+      }
+    };
+    if (imageProviderSelect) {
+      imageProviderSelect.addEventListener("change", () => {
+        updateImageProviderUI();
+        this.saveAPISettings();
+      });
+      // Initial state
+      updateImageProviderUI();
+    }
 
     // Clear config button
     const clearConfigBtn = document.getElementById("clear-config-btn");

@@ -55,6 +55,9 @@ class Config {
           timeout: 60000,
         },
         image: {
+          // Phase 1: allow selecting between SDAPI-style endpoints (Kobold/A1111)
+          // and ComfyUI (Basic workflows). Later phases will expand this.
+          provider: "sdapi",
           baseUrl: "",
           apiKey: "",
           model: "",
@@ -64,6 +67,12 @@ class Config {
           steps: 28,
           cfgScale: 7,
           timeout: 60000,
+
+          // ComfyUI settings (Phase 1 scaffolding)
+          comfyui: {
+            baseUrl: "http://127.0.0.1:8188",
+            workflowFamily: "sd_basic",
+          },
         },
       },
       app: {
@@ -149,8 +158,22 @@ class Config {
     const imageHeight = document.getElementById("image-height")?.value?.trim();
     const imageSampler = document.getElementById("image-sampler")?.value?.trim();
 
+    // Provider (Phase 1 scaffolding)
+    const imageProvider = document
+      .getElementById("image-provider")
+      ?.value?.trim();
+    const comfyuiBaseUrl = document
+      .getElementById("comfyui-base-url")
+      ?.value?.trim();
+    const comfyuiWorkflowFamily = document
+      .getElementById("comfyui-workflow-family")
+      ?.value?.trim();
+
     if (imageBaseUrl !== undefined)
       this.config.api.image.baseUrl = imageBaseUrl;
+    if (imageProvider !== undefined && imageProvider) {
+      this.config.api.image.provider = imageProvider;
+    }
     if (imageApiKey !== undefined) this.config.api.image.apiKey = imageApiKey;
     if (imageModel !== undefined) this.config.api.image.model = imageModel;
     if (imageWidth !== undefined) {
@@ -166,6 +189,14 @@ class Config {
       );
     }
     if (imageSampler !== undefined) this.config.api.image.sampler = imageSampler;
+
+    // ComfyUI settings (Phase 1 scaffolding)
+    if (comfyuiBaseUrl !== undefined && comfyuiBaseUrl) {
+      this.config.api.image.comfyui.baseUrl = comfyuiBaseUrl;
+    }
+    if (comfyuiWorkflowFamily !== undefined && comfyuiWorkflowFamily) {
+      this.config.api.image.comfyui.workflowFamily = comfyuiWorkflowFamily;
+    }
 
     if (imageSteps !== undefined) {
       this.config.api.image.steps = this.normalizeSteps(
@@ -231,6 +262,7 @@ if (imageCfgScale !== undefined) {
 
       // Save image API to form
       const imageBaseUrl = document.getElementById("image-api-base");
+      const imageProvider = document.getElementById("image-provider");
       const imageApiKey = document.getElementById("image-api-key");
       const imageModel = document.getElementById("image-model");
       const imageWidth = document.getElementById("image-width");
@@ -239,9 +271,16 @@ if (imageCfgScale !== undefined) {
       const imageSteps = document.getElementById("image-steps");
       const imageCfgScale = document.getElementById("image-cfg-scale");
 
+      const comfyuiBaseUrl = document.getElementById("comfyui-base-url");
+      const comfyuiWorkflowFamily = document.getElementById(
+        "comfyui-workflow-family",
+      );
+
       if (imageSteps) imageSteps.value = this.config.api.image.steps ?? 28;
       if (imageCfgScale) imageCfgScale.value = this.config.api.image.cfgScale ?? 7;
       if (imageBaseUrl) imageBaseUrl.value = this.config.api.image.baseUrl || "";
+      if (imageProvider)
+        imageProvider.value = this.config.api.image.provider || "sdapi";
       if (imageApiKey) imageApiKey.value = this.config.api.image.apiKey || "";
       if (imageModel) imageModel.value = this.config.api.image.model || "";
       if (imageWidth)
@@ -250,6 +289,12 @@ if (imageCfgScale !== undefined) {
         imageHeight.value = this.config.api.image.height || 1024;
       if (imageSampler)
         imageSampler.value = this.config.api.image.sampler || "Euler";
+
+      if (comfyuiBaseUrl)
+        comfyuiBaseUrl.value = this.config.api.image.comfyui?.baseUrl || "";
+      if (comfyuiWorkflowFamily)
+        comfyuiWorkflowFamily.value =
+          this.config.api.image.comfyui?.workflowFamily || "sd_basic";
 
       // Save toggle states
       const persistApiKeys = document.getElementById("persist-api-keys");
