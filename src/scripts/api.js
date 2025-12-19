@@ -90,6 +90,72 @@ class APIHandler {
     );
   }
 
+  async fetchComfyHistory(comfyBaseUrl, promptId) {
+    const resp = await fetch(`/api/comfy/history/${encodeURIComponent(promptId)}`, {
+      method: "GET",
+      headers: {"X-API-URL": comfyBaseUrl},
+    });
+
+    const text = await resp.text().catch(() => "");
+    let json = null;
+    try { json = JSON.parse(text); } catch { /* ignore */ }
+
+    if (!resp.ok) {
+      const msg = json?.message || json?.error?.message || resp.statusText;
+      throw new Error(`ComfyUI history failed (${resp.status}): ${msg}\n${text}`);
+    }
+    return json ?? {};
+  }
+
+  extractFirstComfyImageFromHistory(historyJson, promptId) {
+    const entry = historyJson?.[promptId];
+    const outputs = entry?.outputs;
+    if (!outputs || typeof outputs !== "object") return null;
+
+    for (const nodeId of Object.keys(outputs)) {
+      const nodeOut = outputs[nodeId];
+      const images = nodeOut?.images;
+      if (Array.isArray(images) && images.length > 0) {
+        const img = images[0];
+        if (img?.filename) {
+          return {
+            filename: img.filename,
+            subfolder: img.subfolder ?? "",
+            type: img.type ?? "output",
+            nodeId,
+          };
+        }
+      }
+    }
+    return null;
+  }
+
+  async waitForComfyOutput(comfyBaseUrl, promptId, opts = {}) {
+    const timeoutMs = Number.isFinite(opts.timeoutMs) ? opts.timeoutMs : 120000;
+    const pollMs = Number.isFinite(opts.pollMs) ? opts.pollMs : 1000;
+    const start = Date.now();
+
+    while (Date.now() - start < timeoutMs) {
+      const history = await this.fetchComfyHistory(comfyBaseUrl, promptId);
+      const entry = history?.[promptId];
+      const img = this.extractFirstComfyImageFromHistory(history, promptId);
+      if (img) return img;
+
+      const completed = entry?.status?.completed === true;
+      const statusStr = entry?.status?.status_str;
+      if (completed && statusStr && statusStr !== "success") {
+        throw new Error(`ComfyUI run completed with status '${statusStr}' (prompt_id: ${promptId}).`);
+      }
+      if (completed) {
+        // Some fully-cached runs report success but return no outputs in history.
+        throw new Error(`ComfyUI completed but returned no outputs (prompt_id: ${promptId}). Try changing seed/prompt to avoid full-cache.`);
+      }
+
+      await new Promise((r) => setTimeout(r, pollMs));
+    }
+    throw new Error(`Timed out waiting for ComfyUI outputs (prompt_id: ${promptId}).`);
+  }
+
   // Phase 1 (Piece 3b-1): load + bind workflow, submit to ComfyUI via proxy.
   // Polling + image fetch are implemented in the next pieces.
   async generateImageViaComfyUI(imagePrompt) {
@@ -198,9 +264,14 @@ class APIHandler {
       );
     }
 
-    // Next pieces will: poll /api/comfy/history/:promptId and fetch /api/comfy/view.
+    // Piece 3b-2: poll history until we get an output filename (no /view fetch yet).
+    const out = await this.waitForComfyOutput(comfyBaseUrl, promptId, {
+      timeoutMs: 120000,
+      pollMs: 1000,
+    });
+
     throw new Error(
-      `ComfyUI submitted successfully (prompt_id: ${promptId}). Polling/image fetch is implemented in the next patch.`,
+      `ComfyUI completed (prompt_id: ${promptId}). Output: ${out.filename} (subfolder: '${out.subfolder}', type: '${out.type}'). Image fetch is implemented in the next patch.`,
     );
   }
 
