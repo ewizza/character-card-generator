@@ -83,6 +83,6 @@
     "sampler": "euler",
     "scheduler": "simple",
     "seed": -1,
-    "ckptName": ""
+    "ckptName": null
   }
 }
