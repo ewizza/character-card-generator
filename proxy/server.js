@@ -742,6 +742,72 @@ app.get("/api/comfy/models/:folder", async (req, res) => {
   }
 });
 
+
+// -----------------------------
+// ComfyUI object_info passthrough (for sampler/scheduler lists, etc.)
+// -----------------------------
+app.get("/api/comfy/object_info", async (req, res) => {
+  try {
+    const apiUrl = req.headers["x-api-url"] || req.headers["x-comfy-url"];
+    if (!apiUrl) {
+      return res.status(400).json({
+        error: {
+          code: "400",
+          message: "ComfyUI Base URL required",
+          details: "Please configure your ComfyUI Base URL in the image settings",
+        },
+      });
+    }
+
+    const fullUrl = buildComfyUrl(apiUrl, "/object_info");
+    const response = await fetch(fullUrl, { method: "GET" });
+    const text = await response.text();
+
+    if (!response.ok) {
+      return res.status(response.status).json({
+        error: {
+          code: response.status.toString(),
+          message: `ComfyUI Error: ${response.statusText}`,
+          details: text,
+        },
+      });
+    }
+
+    let json;
+    try {
+      json = JSON.parse(text);
+    } catch {
+      return res.type("application/json").send(text);
+    }
+
+    // Optional filter: /api/comfy/object_info?class=KSampler
+    const cls = (req.query.class || "").toString().trim();
+    if (cls) {
+      if (json && Object.prototype.hasOwnProperty.call(json, cls)) {
+        return res.json(json[cls]);
+      }
+      return res.status(404).json({
+        error: {
+          code: "404",
+          message: "Class not found in object_info",
+          details: cls,
+        },
+      });
+    }
+
+    return res.json(json);
+  } catch (error) {
+    console.error("ComfyUI /object_info proxy error:", error);
+    res.status(500).json({
+      error: {
+        code: "500",
+        message: "Internal server error in ComfyUI object_info proxy",
+        details: error.message,
+      },
+    });
+  }
+});
+
 // Fetch an output image by filename/subfolder/type
 // Mirrors ComfyUI: GET /view?filename=...&subfolder=...&type=output
 app.get("/api/comfy/view", async (req, res) => {
