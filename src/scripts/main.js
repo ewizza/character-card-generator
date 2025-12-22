@@ -72,6 +72,7 @@ class CharacterGeneratorApp {
 
     this.loadImageSamplers();
     this.loadComfyCheckpoints();
+    this.loadComfySamplerScheduler();
 
   }
 
@@ -383,6 +384,7 @@ class CharacterGeneratorApp {
 
 
       this.loadComfyCheckpoints();
+    this.loadComfySamplerScheduler();
     };
 
     if (imageProviderSelect) {
@@ -392,6 +394,7 @@ class CharacterGeneratorApp {
         updateImageProviderUI();
 
         this.loadComfyCheckpoints();
+    this.loadComfySamplerScheduler();
         this.saveAPISettings();
 
       });
@@ -401,6 +404,7 @@ class CharacterGeneratorApp {
       updateImageProviderUI();
 
       this.loadComfyCheckpoints();
+    this.loadComfySamplerScheduler();
 
     }
 
@@ -411,6 +415,7 @@ class CharacterGeneratorApp {
     if (comfyuiWorkflowFamilyEl) {
       comfyuiWorkflowFamilyEl.addEventListener("change", () => {
         this.loadComfyCheckpoints();
+    this.loadComfySamplerScheduler();
         this.saveAPISettings();
       });
     }
@@ -418,6 +423,7 @@ class CharacterGeneratorApp {
     if (comfyuiBaseUrlEl) {
       comfyuiBaseUrlEl.addEventListener("change", () => {
         this.loadComfyCheckpoints();
+    this.loadComfySamplerScheduler();
         this.saveAPISettings();
       });
     }
@@ -716,6 +722,85 @@ class CharacterGeneratorApp {
 
 
 
+  async loadComfySamplerScheduler() {
+    const provider = document.getElementById("image-provider")?.value || "sdapi";
+    const family = document.getElementById("comfyui-workflow-family")?.value || "sd_basic";
+
+    const samplerGroup = document.getElementById("comfyui-sampler-group");
+    const schedGroup = document.getElementById("comfyui-scheduler-group");
+    const samplerSel = document.getElementById("comfyui-sampler");
+    const schedSel = document.getElementById("comfyui-scheduler");
+    if (!samplerGroup || !schedGroup || !samplerSel || !schedSel) return;
+
+    const shouldShow = provider === "comfyui" && family === "sd_basic";
+    samplerGroup.style.display = shouldShow ? "block" : "none";
+    schedGroup.style.display = shouldShow ? "block" : "none";
+    if (!shouldShow) return;
+
+    const comfyBaseUrl = (document.getElementById("comfyui-base-url")?.value || "").trim()
+      || this.config.get("api.image.comfyui.baseUrl");
+    if (!comfyBaseUrl) {
+      samplerSel.innerHTML = '<option value="">Set ComfyUI Base URL to load samplers</option>';
+      schedSel.innerHTML = '<option value="">Set ComfyUI Base URL to load schedulers</option>';
+      return;
+    }
+
+    const currentSampler = this.config.get("api.image.comfyui.samplerName") || "";
+    const currentSched = this.config.get("api.image.comfyui.schedulerName") || "";
+
+    samplerSel.innerHTML = '<option value="">Loading…</option>';
+    schedSel.innerHTML = '<option value="">Loading…</option>';
+
+    try {
+      const resp = await fetch("/api/comfy/object_info?class=KSampler", {
+        method: "GET",
+        headers: { "X-API-URL": comfyBaseUrl },
+      });
+      const text = await resp.text().catch(() => "");
+      if (!resp.ok) throw new Error(text || resp.statusText);
+
+      let info = null;
+      try { info = JSON.parse(text); } catch { info = null; }
+      const req = info?.input?.required || {};
+
+      // ComfyUI usually encodes dropdown options as: [ [ "opt1","opt2"... ] ]
+      const samplerOpts = (req?.sampler_name?.[0] && Array.isArray(req.sampler_name[0])) ? req.sampler_name[0] : [];
+      const schedOpts = (req?.scheduler?.[0] && Array.isArray(req.scheduler[0])) ? req.scheduler[0] : [];
+
+      function fill(selectEl, opts, current) {
+        selectEl.innerHTML = "";
+        const def = document.createElement("option");
+        def.value = "";
+        def.textContent = "(use workflow default)";
+        selectEl.appendChild(def);
+
+        for (const o of opts) {
+          const opt = document.createElement("option");
+          opt.value = String(o);
+          opt.textContent = String(o);
+          selectEl.appendChild(opt);
+        }
+
+        // Preserve saved value even if missing from list
+        if (current && !opts.includes(current)) {
+          const opt = document.createElement("option");
+          opt.value = current;
+          opt.textContent = `⚠ missing: ${current}`;
+          selectEl.appendChild(opt);
+        }
+
+        selectEl.value = current || "";
+      }
+
+      fill(samplerSel, samplerOpts, currentSampler);
+      fill(schedSel, schedOpts, currentSched);
+    } catch (e) {
+      console.warn("Failed to load ComfyUI sampler/scheduler lists:", e);
+      samplerSel.innerHTML = '<option value="">Failed to load samplers (see console)</option>';
+      schedSel.innerHTML = '<option value="">Failed to load schedulers (see console)</option>';
+    }
+  }
+
   async loadComfyCheckpoints() {
 
     const provider = document.getElementById("image-provider")?.value || "sdapi";
@@ -749,6 +834,7 @@ class CharacterGeneratorApp {
         comfyuiBaseUrlEl.addEventListener("change", () => {
 
           this.loadComfyCheckpoints();
+    this.loadComfySamplerScheduler();
 
         });
 

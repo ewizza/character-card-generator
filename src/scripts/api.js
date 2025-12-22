@@ -201,6 +201,20 @@ class APIHandler {
     const cfgScale = parseFloat(this.config.get("api.image.cfgScale"));
 
     const values = {
+      // Optional ComfyUI sampler/scheduler overrides (sd_basic KSampler node)
+      samplerName: (() => {
+        if ((family || "sd_basic") !== "sd_basic") return undefined;
+        const v = this.config.get("api.image.comfyui.samplerName");
+        const t = v ? String(v).trim() : "";
+        return t ? t : undefined;
+      })(),
+      schedulerName: (() => {
+        if ((family || "sd_basic") !== "sd_basic") return undefined;
+        const v = this.config.get("api.image.comfyui.schedulerName");
+        const t = v ? String(v).trim() : "";
+        return t ? t : undefined;
+      })(),
+
       // Optional SD checkpoint override (ComfyUI SD workflow only)
       ckptName: (function () {
         const fam = family || "sd_basic";

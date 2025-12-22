@@ -69,10 +69,12 @@ class Config {
           timeout: 60000,
 
           // ComfyUI settings (Phase 1 scaffolding)
-    // comfyuiCheckpoint saved below
           comfyui: {
             baseUrl: "http://127.0.0.1:8188",
             workflowFamily: "sd_basic",
+            ckptName: "",
+            samplerName: "",
+            schedulerName: "",
               ckptName: "",
           },
         },
@@ -170,6 +172,15 @@ class Config {
     const comfyuiWorkflowFamily = document
       .getElementById("comfyui-workflow-family")
       ?.value?.trim();
+    const comfyuiCheckpoint = document
+      .getElementById("comfyui-checkpoint")
+      ?.value?.trim();
+    const comfyuiSampler = document
+      .getElementById("comfyui-sampler")
+      ?.value?.trim();
+    const comfyuiScheduler = document
+      .getElementById("comfyui-scheduler")
+      ?.value?.trim();
 
     if (imageBaseUrl !== undefined)
       this.config.api.image.baseUrl = imageBaseUrl;
@@ -192,19 +203,26 @@ class Config {
     }
     if (imageSampler !== undefined) this.config.api.image.sampler = imageSampler;
 
-    // ComfyUI settings (Phase 1 scaffolding)
-    // comfyuiCheckpoint saved below
+            // ComfyUI settings (Phase 1 scaffolding)
     if (comfyuiBaseUrl !== undefined && comfyuiBaseUrl) {
       this.config.api.image.comfyui.baseUrl = comfyuiBaseUrl;
     }
     if (comfyuiWorkflowFamily !== undefined && comfyuiWorkflowFamily) {
       this.config.api.image.comfyui.workflowFamily = comfyuiWorkflowFamily;
+    }
     if (comfyuiCheckpoint !== undefined) {
+      // Empty string means "use workflow default" (we pass undefined downstream)
       this.config.api.image.comfyui.ckptName = comfyuiCheckpoint || "";
     }
+    if (comfyuiSampler !== undefined) {
+      this.config.api.image.comfyui.samplerName = comfyuiSampler || "";
+    }
+    if (comfyuiScheduler !== undefined) {
+      this.config.api.image.comfyui.schedulerName = comfyuiScheduler || "";
+
     }
 
-    if (imageSteps !== undefined) {
+if (imageSteps !== undefined) {
       this.config.api.image.steps = this.normalizeSteps(
         imageSteps,
         this.config.api.image.steps,
@@ -281,6 +299,9 @@ if (imageCfgScale !== undefined) {
       const comfyuiWorkflowFamily = document.getElementById(
         "comfyui-workflow-family",
       );
+      const comfyuiCheckpoint = document.getElementById("comfyui-checkpoint");
+      const comfyuiSampler = document.getElementById("comfyui-sampler");
+      const comfyuiScheduler = document.getElementById("comfyui-scheduler");
 
       if (imageSteps) imageSteps.value = this.config.api.image.steps ?? 28;
       if (imageCfgScale) imageCfgScale.value = this.config.api.image.cfgScale ?? 7;
@@ -304,6 +325,10 @@ if (imageCfgScale !== undefined) {
       if (comfyuiCheckpoint)
         comfyuiCheckpoint.value =
           this.config.api.image.comfyui?.ckptName || "";
+      if (comfyuiSampler)
+        comfyuiSampler.value = this.config.api.image.comfyui?.samplerName || "";
+      if (comfyuiScheduler)
+        comfyuiScheduler.value = this.config.api.image.comfyui?.schedulerName || "";
 
       // Save toggle states
       const persistApiKeys = document.getElementById("persist-api-keys");

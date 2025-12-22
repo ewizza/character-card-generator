@@ -71,6 +71,18 @@
         "node": "4",
         "input": "ckpt_name"
       }
+    ],
+    "samplerName": [
+      {
+        "node": "3",
+        "input": "sampler_name"
+      }
+    ],
+    "schedulerName": [
+      {
+        "node": "3",
+        "input": "scheduler"
+      }
     ]
   },
   "defaults": {
@@ -83,6 +95,8 @@
     "sampler": "euler",
     "scheduler": "simple",
     "seed": -1,
-    "ckptName": null
+    "ckptName": null,
+    "samplerName": null,
+    "schedulerName": null
   }
 }
