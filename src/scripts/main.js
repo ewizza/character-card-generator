@@ -73,6 +73,7 @@ class CharacterGeneratorApp {
     this.loadImageSamplers();
     this.loadComfyCheckpoints();
     this.loadComfySamplerScheduler();
+    this.loadComfyLoras();
 
   }
 
@@ -352,7 +353,7 @@ class CharacterGeneratorApp {
 
     const apiInputs = document.querySelectorAll(
 
-      "#text-api-base, #text-api-key, #text-model, #image-api-base, #image-api-key, #image-model, #image-provider, #comfyui-base-url, #comfyui-workflow-family, #comfyui-checkpoint, #image-width, #image-height, #image-sampler, #image-steps, #image-cfg-scale",
+      "#text-api-base, #text-api-key, #text-model, #image-api-base, #image-api-key, #image-model, #image-provider, #comfyui-base-url, #comfyui-workflow-family, #comfyui-checkpoint, #comfyui-sampler, #comfyui-scheduler, #comfyui-lora, #comfyui-lora-strength-model, #comfyui-lora-strength-clip, #image-width, #image-height, #image-sampler, #image-steps, #image-cfg-scale",
 
     );
 
@@ -385,6 +386,7 @@ class CharacterGeneratorApp {
 
       this.loadComfyCheckpoints();
     this.loadComfySamplerScheduler();
+    this.loadComfyLoras();
     };
 
     if (imageProviderSelect) {
@@ -395,6 +397,7 @@ class CharacterGeneratorApp {
 
         this.loadComfyCheckpoints();
     this.loadComfySamplerScheduler();
+    this.loadComfyLoras();
         this.saveAPISettings();
 
       });
@@ -405,6 +408,7 @@ class CharacterGeneratorApp {
 
       this.loadComfyCheckpoints();
     this.loadComfySamplerScheduler();
+    this.loadComfyLoras();
 
     }
 
@@ -416,6 +420,7 @@ class CharacterGeneratorApp {
       comfyuiWorkflowFamilyEl.addEventListener("change", () => {
         this.loadComfyCheckpoints();
     this.loadComfySamplerScheduler();
+    this.loadComfyLoras();
         this.saveAPISettings();
       });
     }
@@ -424,6 +429,7 @@ class CharacterGeneratorApp {
       comfyuiBaseUrlEl.addEventListener("change", () => {
         this.loadComfyCheckpoints();
     this.loadComfySamplerScheduler();
+    this.loadComfyLoras();
         this.saveAPISettings();
       });
     }
@@ -801,6 +807,98 @@ class CharacterGeneratorApp {
     }
   }
 
+    async loadComfyLoras() {
+    const provider = document.getElementById("image-provider")?.value || "sdapi";
+    const family = document.getElementById("comfyui-workflow-family")?.value || "sd_basic";
+
+    const group = document.getElementById("comfyui-lora-group");
+    const strengthsGroup = document.getElementById("comfyui-lora-strengths-group");
+    const select = document.getElementById("comfyui-lora");
+    const smEl = document.getElementById("comfyui-lora-strength-model");
+    const scEl = document.getElementById("comfyui-lora-strength-clip");
+    if (!group || !select) return;
+
+    const shouldShow = provider === "comfyui" && family === "sd_basic";
+    group.style.display = shouldShow ? "block" : "none";
+    if (!shouldShow) {
+      if (strengthsGroup) strengthsGroup.style.display = "none";
+      return;
+    }
+
+    const comfyBaseUrl =
+      document.getElementById("comfyui-base-url")?.value?.trim() ||
+      this.config.get("api.image.comfyui.baseUrl");
+
+    if (!comfyBaseUrl) {
+      select.innerHTML = '<option value="">Set ComfyUI Base URL to load LoRAs</option>';
+      if (strengthsGroup) strengthsGroup.style.display = "none";
+      return;
+    }
+
+    const current = this.config.get("api.image.comfyui.loraName") || "";
+    const sm = parseFloat(this.config.get("api.image.comfyui.loraStrengthModel"));
+    const sc = parseFloat(this.config.get("api.image.comfyui.loraStrengthClip"));
+    if (smEl) smEl.value = Number.isFinite(sm) ? sm : 1.0;
+    if (scEl) scEl.value = Number.isFinite(sc) ? sc : 1.0;
+
+    if (strengthsGroup) strengthsGroup.style.display = current ? "block" : "none";
+
+    if (!select.dataset.boundToggle) {
+      select.addEventListener("change", () => {
+        if (strengthsGroup) strengthsGroup.style.display = select.value ? "block" : "none";
+      });
+      select.dataset.boundToggle = "1";
+    }
+
+    select.innerHTML = '<option value="">Loading LoRAs…</option>';
+
+    try {
+      const resp = await fetch("/api/comfy/models/loras", {
+        method: "GET",
+        headers: { "X-API-URL": comfyBaseUrl },
+      });
+      const text = await resp.text().catch(() => "");
+      if (!resp.ok) throw new Error(text || resp.statusText);
+
+      let data = null;
+      try { data = JSON.parse(text); } catch { data = null; }
+
+      let items = [];
+      if (Array.isArray(data)) items = data;
+      else if (data && Array.isArray(data.models)) items = data.models;
+      else if (data && Array.isArray(data.loras)) items = data.loras;
+
+      items = items.filter(Boolean).map(String);
+      items.sort((a, b) => a.localeCompare(b));
+
+      select.innerHTML = "";
+      const none = document.createElement("option");
+      none.value = "";
+      none.textContent = "(none)";
+      select.appendChild(none);
+
+      for (const name of items) {
+        const opt = document.createElement("option");
+        opt.value = name;
+        opt.textContent = name;
+        select.appendChild(opt);
+      }
+
+      if (current && !items.includes(current)) {
+        const opt = document.createElement("option");
+        opt.value = current;
+        opt.textContent = `⚠ missing: ${current}`;
+        select.appendChild(opt);
+      }
+
+      select.value = current || "";
+    } catch (e) {
+      console.warn("Failed to load ComfyUI LoRAs:", e);
+      select.innerHTML = '<option value="">Failed to load LoRAs (see console)</option>';
+      if (strengthsGroup) strengthsGroup.style.display = "none";
+    }
+  }
+
   async loadComfyCheckpoints() {
 
     const provider = document.getElementById("image-provider")?.value || "sdapi";
@@ -835,6 +933,7 @@ class CharacterGeneratorApp {
 
           this.loadComfyCheckpoints();
     this.loadComfySamplerScheduler();
+    this.loadComfyLoras();
 
         });
 
