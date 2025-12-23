@@ -75,7 +75,9 @@ class Config {
             ckptName: "",
             samplerName: "",
             schedulerName: "",
-              ckptName: "",
+            loraName: "",
+            loraStrengthModel: 1.0,
+            loraStrengthClip: 1.0,
           },
         },
       },
@@ -135,121 +137,134 @@ class Config {
   }
 
   loadFromForm() {
-    // Load text API settings from form
+    // Text API
     const textBaseUrl = document.getElementById("text-api-base")?.value?.trim();
     const textApiKey = document.getElementById("text-api-key")?.value?.trim();
     const textModel = document.getElementById("text-model")?.value?.trim();
-    const imageSteps = document.getElementById("image-steps")?.value?.trim();
-    const imageCfgScale = document.getElementById("image-cfg-scale")?.value?.trim();
-
 
     if (textBaseUrl !== undefined) this.config.api.text.baseUrl = textBaseUrl;
     if (textApiKey !== undefined) this.config.api.text.apiKey = textApiKey;
     if (textModel !== undefined) this.config.api.text.model = textModel;
-    if (imageSteps !== undefined) this.config.api.image.steps = this.normalizeSteps(imageSteps, this.config.api.image.steps);
-    if (imageCfgScale !== undefined) this.config.api.image.cfgScale = this.normalizeCfgScale(imageCfgScale, this.config.api.image.cfgScale);
 
-
-    // No special handling needed when using proxy server
-
-    // Load image API settings from form
-    const imageBaseUrl = document
-      .getElementById("image-api-base")
-      ?.value?.trim();
+    // Image common
+    const imageBaseUrl = document.getElementById("image-api-base")?.value?.trim();
     const imageApiKey = document.getElementById("image-api-key")?.value?.trim();
     const imageModel = document.getElementById("image-model")?.value?.trim();
     const imageWidth = document.getElementById("image-width")?.value?.trim();
     const imageHeight = document.getElementById("image-height")?.value?.trim();
     const imageSampler = document.getElementById("image-sampler")?.value?.trim();
+    const imageSteps = document.getElementById("image-steps")?.value?.trim();
+    const imageCfgScale = document.getElementById("image-cfg-scale")?.value?.trim();
 
-    // Provider (Phase 1 scaffolding)
-    const imageProvider = document
-      .getElementById("image-provider")
-      ?.value?.trim();
-    const comfyuiBaseUrl = document
-      .getElementById("comfyui-base-url")
-      ?.value?.trim();
-    const comfyuiWorkflowFamily = document
-      .getElementById("comfyui-workflow-family")
-      ?.value?.trim();
-    const comfyuiCheckpoint = document
-      .getElementById("comfyui-checkpoint")
-      ?.value?.trim();
-    const comfyuiSampler = document
-      .getElementById("comfyui-sampler")
-      ?.value?.trim();
-    const comfyuiScheduler = document
-      .getElementById("comfyui-scheduler")
-      ?.value?.trim();
+    // Provider + ComfyUI (Phase 1)
+    const imageProvider = document.getElementById("image-provider")?.value?.trim();
+    const comfyuiBaseUrl = document.getElementById("comfyui-base-url")?.value?.trim();
+    const comfyuiWorkflowFamily = document.getElementById("comfyui-workflow-family")?.value?.trim();
+    const comfyuiCheckpoint = document.getElementById("comfyui-checkpoint")?.value?.trim();
+    const comfyuiSampler = document.getElementById("comfyui-sampler")?.value?.trim();
+    const comfyuiScheduler = document.getElementById("comfyui-scheduler")?.value?.trim();
+    const comfyuiLora = document.getElementById("comfyui-lora")?.value?.trim();
+    const comfyuiLoraStrengthModel = document.getElementById("comfyui-lora-strength-model")?.value?.trim();
+    const comfyuiLoraStrengthClip = document.getElementById("comfyui-lora-strength-clip")?.value?.trim();
 
-    if (imageBaseUrl !== undefined)
-      this.config.api.image.baseUrl = imageBaseUrl;
-    if (imageProvider !== undefined && imageProvider) {
-      this.config.api.image.provider = imageProvider;
-    }
+    if (imageBaseUrl !== undefined) this.config.api.image.baseUrl = imageBaseUrl;
     if (imageApiKey !== undefined) this.config.api.image.apiKey = imageApiKey;
     if (imageModel !== undefined) this.config.api.image.model = imageModel;
+
     if (imageWidth !== undefined) {
       this.config.api.image.width = this.normalizeImageDimension(
         imageWidth,
         this.config.api.image.width,
       );
     }
+
     if (imageHeight !== undefined) {
       this.config.api.image.height = this.normalizeImageDimension(
         imageHeight,
         this.config.api.image.height,
       );
     }
+
     if (imageSampler !== undefined) this.config.api.image.sampler = imageSampler;
 
-            // ComfyUI settings (Phase 1 scaffolding)
-    if (comfyuiBaseUrl !== undefined && comfyuiBaseUrl) {
-      this.config.api.image.comfyui.baseUrl = comfyuiBaseUrl;
-    }
-    if (comfyuiWorkflowFamily !== undefined && comfyuiWorkflowFamily) {
-      this.config.api.image.comfyui.workflowFamily = comfyuiWorkflowFamily;
-    }
-    if (comfyuiCheckpoint !== undefined) {
-      // Empty string means "use workflow default" (we pass undefined downstream)
-      this.config.api.image.comfyui.ckptName = comfyuiCheckpoint || "";
-    }
-    if (comfyuiSampler !== undefined) {
-      this.config.api.image.comfyui.samplerName = comfyuiSampler || "";
-    }
-    if (comfyuiScheduler !== undefined) {
-      this.config.api.image.comfyui.schedulerName = comfyuiScheduler || "";
-
-    }
-
-if (imageSteps !== undefined) {
+    if (imageSteps !== undefined) {
       this.config.api.image.steps = this.normalizeSteps(
         imageSteps,
         this.config.api.image.steps,
       );
     }
 
-if (imageCfgScale !== undefined) {
+    if (imageCfgScale !== undefined) {
       this.config.api.image.cfgScale = this.normalizeCfgScale(
         imageCfgScale,
         this.config.api.image.cfgScale,
       );
     }
 
-    // Load toggle states
+    if (imageProvider !== undefined && imageProvider) {
+      this.config.api.image.provider = imageProvider;
+    }
+
+    if (!this.config.api.image.comfyui) {
+      this.config.api.image.comfyui = {
+        baseUrl: "http://127.0.0.1:8188",
+        workflowFamily: "sd_basic",
+        ckptName: "",
+        samplerName: "",
+        schedulerName: "",
+        loraName: "",
+        loraStrengthModel: 1.0,
+        loraStrengthClip: 1.0,
+      };
+    }
+
+    if (comfyuiBaseUrl !== undefined && comfyuiBaseUrl) {
+      this.config.api.image.comfyui.baseUrl = comfyuiBaseUrl;
+    }
+
+    if (comfyuiWorkflowFamily !== undefined && comfyuiWorkflowFamily) {
+      this.config.api.image.comfyui.workflowFamily = comfyuiWorkflowFamily;
+    }
+
+    if (comfyuiCheckpoint !== undefined) {
+      this.config.api.image.comfyui.ckptName = comfyuiCheckpoint || "";
+    }
+
+    if (comfyuiSampler !== undefined) {
+      this.config.api.image.comfyui.samplerName = comfyuiSampler || "";
+    }
+
+    if (comfyuiScheduler !== undefined) {
+      this.config.api.image.comfyui.schedulerName = comfyuiScheduler || "";
+    }
+
+    if (comfyuiLora !== undefined) {
+      this.config.api.image.comfyui.loraName = comfyuiLora || "";
+    }
+
+    if (comfyuiLoraStrengthModel !== undefined) {
+      const v = parseFloat(comfyuiLoraStrengthModel);
+      this.config.api.image.comfyui.loraStrengthModel = Number.isFinite(v) ? v : 1.0;
+    }
+
+    if (comfyuiLoraStrengthClip !== undefined) {
+      const v = parseFloat(comfyuiLoraStrengthClip);
+      this.config.api.image.comfyui.loraStrengthClip = Number.isFinite(v) ? v : 1.0;
+    }
+
+    // Toggles
     const persistApiKeys = document.getElementById("persist-api-keys")?.checked;
     if (persistApiKeys !== undefined) {
       this.config.app.persistApiKeys = persistApiKeys;
-      // Update storage method when toggle changes
       this.updateStorageMethod();
     }
 
-    const enableImageGeneration = document.getElementById(
-      "enable-image-generation",
-    )?.checked;
-    if (enableImageGeneration !== undefined)
+    const enableImageGeneration = document.getElementById("enable-image-generation")?.checked;
+    if (enableImageGeneration !== undefined) {
       this.config.app.enableImageGeneration = enableImageGeneration;
+    }
   }
+
 
   get(path) {
     return path.split(".").reduce((obj, key) => obj && obj[key], this.config);
@@ -302,6 +317,9 @@ if (imageCfgScale !== undefined) {
       const comfyuiCheckpoint = document.getElementById("comfyui-checkpoint");
       const comfyuiSampler = document.getElementById("comfyui-sampler");
       const comfyuiScheduler = document.getElementById("comfyui-scheduler");
+      const comfyuiLora = document.getElementById("comfyui-lora");
+      const comfyuiLoraStrengthModel = document.getElementById("comfyui-lora-strength-model");
+      const comfyuiLoraStrengthClip = document.getElementById("comfyui-lora-strength-clip");
 
       if (imageSteps) imageSteps.value = this.config.api.image.steps ?? 28;
       if (imageCfgScale) imageCfgScale.value = this.config.api.image.cfgScale ?? 7;
@@ -329,6 +347,13 @@ if (imageCfgScale !== undefined) {
         comfyuiSampler.value = this.config.api.image.comfyui?.samplerName || "";
       if (comfyuiScheduler)
         comfyuiScheduler.value = this.config.api.image.comfyui?.schedulerName || "";
+      if (comfyuiLora)
+        comfyuiLora.value = this.config.api.image.comfyui?.loraName || "";
+      if (comfyuiLoraStrengthModel)
+        comfyuiLoraStrengthModel.value = (this.config.api.image.comfyui?.loraStrengthModel ?? 1.0);
+      if (comfyuiLoraStrengthClip)
+        comfyuiLoraStrengthClip.value = (this.config.api.image.comfyui?.loraStrengthClip ?? 1.0);
+
 
       // Save toggle states
       const persistApiKeys = document.getElementById("persist-api-keys");
