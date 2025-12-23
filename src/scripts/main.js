@@ -867,13 +867,13 @@ class CharacterGeneratorApp {
 
     if (strengthsGroup) strengthsGroup.style.display = current ? "block" : "none";
 
-    if (!select.addEventListener("input", () => {
+    if (!select.dataset.boundToggle) {
+      const toggleStrengths = () => {
         if (strengthsGroup) strengthsGroup.style.display = select.value ? "block" : "none";
-      });
-      select.dataset.boundToggle) {
-      select.addEventListener("change", () => {
-        if (strengthsGroup) strengthsGroup.style.display = select.value ? "block" : "none";
-      });
+      };
+      // Change covers mouse selection; input helps with some browser/select behaviors
+      select.addEventListener("change", toggleStrengths);
+      select.addEventListener("input", toggleStrengths);
       select.dataset.boundToggle = "1";
     }
 
