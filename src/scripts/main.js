@@ -30,6 +30,8 @@ class CharacterGeneratorApp {
 
     this.isGenerating = false;
 
+    this.apiSettingsIsOpen = false;
+
 
 
     this.init();
@@ -68,12 +70,12 @@ class CharacterGeneratorApp {
 
     this.initPromptPresets();
 
-    this.checkAPIStatus();
+    
 
-    this.loadImageSamplers();
-    this.loadComfyCheckpoints();
-    this.loadComfySamplerScheduler();
-    this.loadComfyLoras();
+    // Don't attempt any outbound API calls until the user opens API Settings.
+    const statusText = document.querySelector("#api-status .status-text");
+    if (statusText) statusText.textContent = "API Status: Not checked";
+
 
   }
 
@@ -537,25 +539,33 @@ class CharacterGeneratorApp {
     // Open modal
 
     apiSettingsBtn.addEventListener("click", () => {
-
       modalOverlay.classList.add("show");
-
       document.body.style.overflow = "hidden"; // Prevent background scrolling
+      this.apiSettingsIsOpen = true;
 
-      this.loadImageSamplers();
+      // Only now do we attempt outbound API calls / dynamic lists.
+      this.checkAPIStatus();
 
+      const provider =
+        document.getElementById("image-provider")?.value ||
+        this.config.get("api.image.provider") ||
+        "sdapi";
+
+      if (provider === "comfyui") {
+        this.loadComfyCheckpoints();
+        this.loadComfySamplerScheduler();
+        if (typeof this.loadComfyLoras === "function") this.loadComfyLoras();
+      } else {
+        this.loadImageSamplers();
+      }
     });
 
-
-
-    // Close modal function
+// Close modal function
 
     const closeModal = () => {
-
       modalOverlay.classList.remove("show");
-
       document.body.style.overflow = ""; // Restore scrolling
-
+      this.apiSettingsIsOpen = false;
     };
 
 
@@ -597,60 +607,71 @@ class CharacterGeneratorApp {
 
 
   async checkAPIStatus() {
-
     const statusElement = document.getElementById("api-status");
+    if (!statusElement) return;
 
     const indicator = statusElement.querySelector(".status-indicator");
-
     const text = statusElement.querySelector(".status-text");
+    if (!indicator || !text) return;
 
-
-
-    try {
-
-      const result = await this.apiHandler.testConnection();
-
-      if (result.success) {
-
-        indicator.className = "status-indicator status-online";
-
-        text.textContent = "API Status: Connected";
-
-      } else {
-
-        indicator.className = "status-indicator status-offline";
-
-        text.textContent = `API Status: ${result.error}`;
-
-      }
-
-    } catch (error) {
-
-      indicator.className = "status-indicator status-offline";
-
-      text.textContent = `API Status: ${error.message}`;
-
+    // Only check when the API settings modal is open.
+    if (!this.apiSettingsIsOpen) {
+      text.textContent = "API Status: Not checked";
+      return;
     }
 
+    text.textContent = "API Status: Checking...";
+    indicator.className = "status-indicator";
+
+    try {
+      const timeoutMs = 5000;
+      const result = await Promise.race([
+        this.apiHandler.testConnection(),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("Connection check timed out")), timeoutMs),
+        ),
+      ]);
+
+      if (result && result.success) {
+        indicator.className = "status-indicator status-online";
+        text.textContent = "API Status: Connected";
+      } else {
+        indicator.className = "status-indicator status-offline";
+        text.textContent = `API Status: ${result?.error || "Not configured"}`;
+      }
+    } catch (error) {
+      indicator.className = "status-indicator status-offline";
+      text.textContent = `API Status: ${error?.message || error}`;
+    }
   }
-
-
-
   saveAPISettings() {
-
     this.config.loadFromForm();
-
     this.config.saveConfig();
+
+    // Do not connect to any APIs unless the API settings modal is open.
+    if (!this.apiSettingsIsOpen) return;
 
     this.checkAPIStatus();
 
-    this.loadImageSamplers();
+    const provider =
+      document.getElementById("image-provider")?.value ||
+      this.config.get("api.image.provider") ||
+      "sdapi";
 
+    if (provider === "comfyui") {
+      this.loadComfyCheckpoints();
+      this.loadComfySamplerScheduler();
+      if (typeof this.loadComfyLoras === "function") this.loadComfyLoras();
+    } else {
+      this.loadImageSamplers();
+    }
   }
 
 
 
   async loadImageSamplers() {
+
+    if (!this.apiSettingsIsOpen) return;
 
     const samplerSelect = document.getElementById("image-sampler");
 
@@ -729,6 +750,8 @@ class CharacterGeneratorApp {
 
 
   async loadComfySamplerScheduler() {
+
+    if (!this.apiSettingsIsOpen) return;
     const provider = document.getElementById("image-provider")?.value || "sdapi";
     const family = document.getElementById("comfyui-workflow-family")?.value || "sd_basic";
 
@@ -900,6 +923,8 @@ class CharacterGeneratorApp {
   }
 
   async loadComfyCheckpoints() {
+
+    if (!this.apiSettingsIsOpen) return;
 
     const provider = document.getElementById("image-provider")?.value || "sdapi";
 
