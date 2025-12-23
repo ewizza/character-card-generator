@@ -831,6 +831,7 @@ class CharacterGeneratorApp {
   }
 
     async loadComfyLoras() {
+    if (!this.apiSettingsIsOpen) return;
     const provider = document.getElementById("image-provider")?.value || "sdapi";
     const family = document.getElementById("comfyui-workflow-family")?.value || "sd_basic";
 
@@ -866,7 +867,10 @@ class CharacterGeneratorApp {
 
     if (strengthsGroup) strengthsGroup.style.display = current ? "block" : "none";
 
-    if (!select.dataset.boundToggle) {
+    if (!select.addEventListener("input", () => {
+        if (strengthsGroup) strengthsGroup.style.display = select.value ? "block" : "none";
+      });
+      select.dataset.boundToggle) {
       select.addEventListener("change", () => {
         if (strengthsGroup) strengthsGroup.style.display = select.value ? "block" : "none";
       });
@@ -915,6 +919,7 @@ class CharacterGeneratorApp {
       }
 
       select.value = current || "";
+      if (strengthsGroup) strengthsGroup.style.display = select.value ? "block" : "none";
     } catch (e) {
       console.warn("Failed to load ComfyUI LoRAs:", e);
       select.innerHTML = '<option value="">Failed to load LoRAs (see console)</option>';
