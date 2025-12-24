@@ -11,6 +11,9 @@ A web application for creating character cards for SillyTavern. It uses AI model
 >Added functionality to change and save your prompts. Clone the defaults or create from scratch. Make changes and save/delete. Changes stored in local storage.
 ![Prompts](prompts.png)
 
+[!NEW]
+Added functionality to change and save your prompts. Clone the defaults or create from scratch. Make changes and save/delete. Changes stored in local storage.
+[!Prompts admin](prompts.png)
 ## Core Capabilities
 
 ### Character Synthesis

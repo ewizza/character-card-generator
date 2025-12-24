@@ -1,0 +1,102 @@
+{
+  "family": "sd_basic",
+  "template": "/workflows/comfy/sd_basic.api.json",
+  "output": {
+    "node": "9",
+    "kind": "images"
+  },
+  "map": {
+    "prompt": [
+      {
+        "node": "6",
+        "input": "text"
+      }
+    ],
+    "negativePrompt": [
+      {
+        "node": "7",
+        "input": "text"
+      }
+    ],
+    "width": [
+      {
+        "node": "5",
+        "input": "width"
+      }
+    ],
+    "height": [
+      {
+        "node": "5",
+        "input": "height"
+      }
+    ],
+    "batchSize": [
+      {
+        "node": "5",
+        "input": "batch_size"
+      }
+    ],
+    "seed": [
+      {
+        "node": "3",
+        "input": "seed"
+      }
+    ],
+    "steps": [
+      {
+        "node": "3",
+        "input": "steps"
+      }
+    ],
+    "cfgScale": [
+      {
+        "node": "3",
+        "input": "cfg"
+      }
+    ],
+    "sampler": [
+      {
+        "node": "3",
+        "input": "sampler_name"
+      }
+    ],
+    "scheduler": [
+      {
+        "node": "3",
+        "input": "scheduler"
+      }
+    ],
+    "ckptName": [
+      {
+        "node": "4",
+        "input": "ckpt_name"
+      }
+    ],
+    "samplerName": [
+      {
+        "node": "3",
+        "input": "sampler_name"
+      }
+    ],
+    "schedulerName": [
+      {
+        "node": "3",
+        "input": "scheduler"
+      }
+    ]
+  },
+  "defaults": {
+    "negativePrompt": "",
+    "width": 512,
+    "height": 512,
+    "batchSize": 1,
+    "steps": 30,
+    "cfgScale": 6,
+    "sampler": "euler",
+    "scheduler": "simple",
+    "seed": -1,
+    "ckptName": null,
+    "samplerName": null,
+    "schedulerName": null
+  }
+}

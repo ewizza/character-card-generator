@@ -6,7 +6,381 @@ class APIHandler {
     this.lastGeneratedImagePrompt = null; // Store the last generated prompt for display
     this.currentAbortController = null; // Store current abort controller for stopping generation
     this.currentReader = null; // Store current stream reader for cancellation
+  
+    // ComfyUI client id (optional, but helps keep prompt submissions associated)
+    this.comfyClientId = this.getOrCreateComfyClientId();
   }
+
+  // Persist a stable client id for ComfyUI submissions (helps ComfyUI track a client session).
+  getOrCreateComfyClientId() {
+    try {
+      const key = "comfyui_client_id";
+      const existing = localStorage.getItem(key);
+      if (existing && typeof existing === "string" && existing.length >= 8) {
+        return existing;
+      }
+      // Use crypto.randomUUID when available.
+      const created =
+        typeof crypto !== "undefined" && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `comfy_${Date.now()}_${Math.floor(Math.random() * 1e9)}`;
+      localStorage.setItem(key, created);
+      return created;
+    } catch {
+      // If localStorage is blocked, fall back to an in-memory id.
+      return `comfy_${Date.now()}_${Math.floor(Math.random() * 1e9)}`;
+    }
+  }
+
+  async loadJson(url) {
+    const response = await fetch(url, { method: "GET" });
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      throw new Error(
+        `Failed to load ${url} (${response.status}): ${text || response.statusText}`,
+      );
+    }
+    return await response.json();
+  }
+
+  async loadScript(url) {
+    return await new Promise((resolve, reject) => {
+      try {
+        const s = document.createElement("script");
+        s.src = url;
+        s.async = true;
+        s.onload = () => resolve(true);
+        s.onerror = () =>
+          reject(new Error(`Failed to load script: ${url}`));
+        document.head.appendChild(s);
+      } catch (e) {
+        reject(e);
+      }
+    });
+  }
+
+  // Ensure the ComfyUI bindings helper is available.
+  // In dev, users may hot-swap branches without a hard refresh, so index.html may not reload.
+  async ensureComfyBindingsLoaded() {
+    if (window.comfyWorkflow?.applyBindings) return;
+
+    // Try loading from both paths depending on how the frontend is served.
+    const candidates = [
+      // Normal static path
+      "src/scripts/comfy/applyBindings.js",
+      // If served behind an alias
+      "/src/scripts/comfy/applyBindings.js",
+    ];
+
+    let lastErr = null;
+    for (const c of candidates) {
+      try {
+        await this.loadScript(c);
+        if (window.comfyWorkflow?.applyBindings) return;
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+
+    throw new Error(
+      `ComfyUI bindings helper missing (window.comfyWorkflow.applyBindings).\n` +
+        `Try a hard refresh (Ctrl+F5) after switching branches, or ensure index.html includes:\n` +
+        `<script src=\"src/scripts/comfy/applyBindings.js\"></script>\n` +
+        (lastErr ? `Last load error: ${lastErr.message}` : ""),
+    );
+  }
+
+  async fetchComfyHistory(comfyBaseUrl, promptId) {
+    const resp = await fetch(`/api/comfy/history/${encodeURIComponent(promptId)}`, {
+      method: "GET",
+      headers: {"X-API-URL": comfyBaseUrl},
+    });
+
+    const text = await resp.text().catch(() => "");
+    let json = null;
+    try { json = JSON.parse(text); } catch { /* ignore */ }
+
+    if (!resp.ok) {
+      const msg = json?.message || json?.error?.message || resp.statusText;
+      throw new Error(`ComfyUI history failed (${resp.status}): ${msg}\n${text}`);
+    }
+    return json ?? {};
+  }
+
+  extractFirstComfyImageFromHistory(historyJson, promptId) {
+    const entry = historyJson?.[promptId];
+    const outputs = entry?.outputs;
+    if (!outputs || typeof outputs !== "object") return null;
+
+    for (const nodeId of Object.keys(outputs)) {
+      const nodeOut = outputs[nodeId];
+      const images = nodeOut?.images;
+      if (Array.isArray(images) && images.length > 0) {
+        const img = images[0];
+        if (img?.filename) {
+          return {
+            filename: img.filename,
+            subfolder: img.subfolder ?? "",
+            type: img.type ?? "output",
+            nodeId,
+          };
+        }
+      }
+    }
+    return null;
+  }
+
+  async waitForComfyOutput(comfyBaseUrl, promptId, opts = {}) {
+    const timeoutMs = Number.isFinite(opts.timeoutMs) ? opts.timeoutMs : 120000;
+    const pollMs = Number.isFinite(opts.pollMs) ? opts.pollMs : 1000;
+    const start = Date.now();
+
+    while (Date.now() - start < timeoutMs) {
+      const history = await this.fetchComfyHistory(comfyBaseUrl, promptId);
+      const entry = history?.[promptId];
+      const img = this.extractFirstComfyImageFromHistory(history, promptId);
+      if (img) return img;
+
+      const completed = entry?.status?.completed === true;
+      const statusStr = entry?.status?.status_str;
+      if (completed && statusStr && statusStr !== "success") {
+        throw new Error(`ComfyUI run completed with status '${statusStr}' (prompt_id: ${promptId}).`);
+      }
+      if (completed) {
+        // Some fully-cached runs report success but return no outputs in history.
+        throw new Error(`ComfyUI completed but returned no outputs (prompt_id: ${promptId}). Try changing seed/prompt to avoid full-cache.`);
+      }
+
+      await new Promise((r) => setTimeout(r, pollMs));
+    }
+    throw new Error(`Timed out waiting for ComfyUI outputs (prompt_id: ${promptId}).`);
+  }
+
+  // Phase 1 (Piece 3b-1): load + bind workflow, submit to ComfyUI via proxy.
+  // Polling + image fetch are implemented in the next pieces.
+  async generateImageViaComfyUI(imagePrompt) {
+    const comfyBaseUrl = this.config.get("api.image.comfyui.baseUrl");
+    if (!comfyBaseUrl) {
+      throw new Error(
+        "ComfyUI Base URL required. Please configure your ComfyUI Base URL in the image settings.",
+      );
+    }
+
+    const family =
+      this.config.get("api.image.comfyui.workflowFamily") || "sd_basic";
+
+    const workflowCandidates = [
+      `/workflows/comfy/${family}.api.json`,
+      `/public/workflows/comfy/${family}.api.json`,
+    ];
+    const bindingsCandidates = [
+      `/workflows/comfy/${family}.bindings.json`,
+      `/public/workflows/comfy/${family}.bindings.json`,
+    ];
+
+    const loadFirst = async (urls) => {
+      let lastErr = null;
+      for (const u of urls) {
+        try {
+          return await this.loadJson(u);
+        } catch (e) {
+          lastErr = e;
+        }
+      }
+      throw lastErr || new Error("Failed to load workflow assets");
+    };
+
+    const [workflowTemplate, bindings] = await Promise.all([
+      loadFirst(workflowCandidates),
+      loadFirst(bindingsCandidates),
+    ]);
+
+    const width = parseInt(this.config.get("api.image.width"), 10);
+    const height = parseInt(this.config.get("api.image.height"), 10);
+    const steps = parseInt(this.config.get("api.image.steps"), 10);
+    const cfgScale = parseFloat(this.config.get("api.image.cfgScale"));
+
+    const values = {
+      // Optional ComfyUI sampler/scheduler overrides (sd_basic KSampler node)
+      samplerName: (() => {
+        if ((family || "sd_basic") !== "sd_basic") return undefined;
+        const v = this.config.get("api.image.comfyui.samplerName");
+        const t = v ? String(v).trim() : "";
+        return t ? t : undefined;
+      })(),
+      schedulerName: (() => {
+        if ((family || "sd_basic") !== "sd_basic") return undefined;
+        const v = this.config.get("api.image.comfyui.schedulerName");
+        const t = v ? String(v).trim() : "";
+        return t ? t : undefined;
+      })(),
+
+      // Optional SD checkpoint override (ComfyUI SD workflow only)
+      ckptName: (function () {
+        const fam = family || "sd_basic";
+        if (fam !== "sd_basic") return undefined;
+        const raw = this.config.get("api.image.comfyui.ckptName");
+        if (!raw) return undefined;
+        return String(raw).trim();
+      }).call(this),
+
+      prompt: imagePrompt,
+      negativePrompt: "",
+      width: Number.isFinite(width) ? width : undefined,
+      height: Number.isFinite(height) ? height : undefined,
+      steps: Number.isFinite(steps) ? steps : undefined,
+      cfgScale: Number.isFinite(cfgScale) ? cfgScale : undefined,
+      // Sampler: let the workflow default stand unless a ComfyUI-specific sampler is set.
+      // (SDAPI sampler names are often Title Case, e.g. "Euler", which fails ComfyUI validation.)
+      sampler: (function () {
+        const raw = this.config.get("api.image.comfyui.sampler");
+        if (!raw) return undefined;
+        return String(raw).trim().toLowerCase();
+      }).call(this),
+      // scheduler/seed use workflow defaults unless configured later
+      batchSize: 1,
+    };
+
+    await this.ensureComfyBindingsLoaded();
+
+    const boundWorkflow = window.comfyWorkflow.applyBindings(
+      workflowTemplate,
+      bindings,
+      values,
+    );
+
+
+    // Optional LoRA injection for sd_basic (adds LoraLoader node and rewires model/clip)
+    const loraNameRaw = this.config.get("api.image.comfyui.loraName");
+    const loraName = loraNameRaw ? String(loraNameRaw).trim() : "";
+    const smRaw = this.config.get("api.image.comfyui.loraStrengthModel");
+    const scRaw = this.config.get("api.image.comfyui.loraStrengthClip");
+    const strengthModel = Number.isFinite(parseFloat(smRaw)) ? parseFloat(smRaw) : 1.0;
+    const strengthClip = Number.isFinite(parseFloat(scRaw)) ? parseFloat(scRaw) : 1.0;
+
+    let finalWorkflow = boundWorkflow;
+    if ((family || "sd_basic") === "sd_basic" && loraName) {
+      finalWorkflow = this.injectSdBasicLora(finalWorkflow, loraName, strengthModel, strengthClip);
+    }
+
+
+
+    const submitResponse = await fetch("/api/comfy/prompt", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-API-URL": comfyBaseUrl,
+      },
+      body: JSON.stringify({
+        prompt: finalWorkflow,
+        client_id: this.comfyClientId,
+      }),
+    });
+
+    const submitText = await submitResponse.text();
+    let submitJson = null;
+    try {
+      submitJson = JSON.parse(submitText);
+    } catch {
+      // ignore
+    }
+
+    if (!submitResponse.ok) {
+      const msg =
+        submitJson?.error?.message ||
+        submitJson?.message ||
+        submitResponse.statusText;
+      const details = submitJson?.error?.details || submitText;
+      throw new Error(
+        `ComfyUI submit failed (${submitResponse.status}): ${msg}\n${details}`,
+      );
+    }
+
+    const promptId = submitJson?.prompt_id;
+    if (!promptId) {
+      throw new Error(
+        `ComfyUI submit succeeded but no prompt_id was returned: ${submitText}`,
+      );
+    }
+
+    // Piece 3b-2: poll history until we get an output filename (no /view fetch yet).
+    const out = await this.waitForComfyOutput(comfyBaseUrl, promptId, {
+      timeoutMs: 120000,
+      pollMs: 1000,
+    });
+
+        // Piece 3b-3: fetch the output image via /api/comfy/view and return a blob URL for display.
+    let imgBlob;
+    try {
+      imgBlob = await this.fetchComfyViewBlob(
+        comfyBaseUrl,
+        out.filename,
+        out.subfolder,
+        out.type,
+      );
+    } catch (e) {
+      throw new Error(`ComfyUI image fetch failed (prompt_id: ${promptId}): ${e.message}`);
+    }
+
+    const objectUrl = URL.createObjectURL(imgBlob);
+    return objectUrl;
+  }
+    injectSdBasicLora(workflow, loraName, strengthModel, strengthClip) {
+    if (!workflow || typeof workflow !== "object") return workflow;
+
+    // sd_basic expects: 3=KSampler, 4=CheckpointLoaderSimple, 6/7=CLIPTextEncode
+    const required = ["3", "4", "6", "7"];
+    for (const id of required) {
+      if (!workflow[id] || !workflow[id].inputs) {
+        throw new Error(`sd_basic workflow missing required node ${id} for LoRA injection`);
+      }
+    }
+
+    const numericIds = Object.keys(workflow)
+      .filter((k) => /^\d+$/.test(k))
+      .map((k) => parseInt(k, 10))
+      .filter((n) => Number.isFinite(n));
+    const nextId = String((numericIds.length ? Math.max(...numericIds) : 0) + 1);
+
+    workflow[nextId] = {
+      inputs: {
+        lora_name: String(loraName),
+        strength_model: Number.isFinite(strengthModel) ? strengthModel : 1.0,
+        strength_clip: Number.isFinite(strengthClip) ? strengthClip : 1.0,
+        model: ["4", 0],
+        clip: ["4", 1],
+      },
+      class_type: "LoraLoader",
+      _meta: { title: "Load LoRA" },
+    };
+
+    workflow["3"].inputs.model = [nextId, 0];
+    workflow["6"].inputs.clip = [nextId, 1];
+    workflow["7"].inputs.clip = [nextId, 1];
+
+    return workflow;
+  }
+
+async fetchComfyViewBlob(comfyBaseUrl, filename, subfolder = "", type = "output") {
+    const qs = new URLSearchParams({
+      filename: filename,
+      subfolder: subfolder ?? "",
+      type: type ?? "output",
+    }).toString();
+
+    const resp = await fetch(`/api/comfy/view?${qs}`, {
+      method: "GET",
+      headers: { "X-API-URL": comfyBaseUrl },
+    });
+
+    if (!resp.ok) {
+      const t = await resp.text().catch(() => "");
+      throw new Error(`ComfyUI view failed (${resp.status}): ${t || resp.statusText}`);
+    }
+
+    return await resp.blob();
+  }
+
 
   async makeRequest(endpoint, data, isImageRequest = false, stream = false) {
     // Use proxy server to bypass browser API restrictions
@@ -320,6 +694,11 @@ class APIHandler {
     // Store the prompt so it can be accessed later
     this.lastGeneratedImagePrompt = imagePrompt;
 
+    const provider = this.config.get("api.image.provider") || "sdapi";
+    if (provider === "comfyui") {
+      return await this.generateImageViaComfyUI(imagePrompt);
+    }
+
     const model = this.config.get("api.image.model");
     const apiUrl = this.config.get("api.image.baseUrl");
 
@@ -354,6 +733,10 @@ class APIHandler {
         ? "sampler_name"
         : "sampler";
       data[samplerKey] = sampler;
+    }
+    const scheduler = this.config.get("api.image.scheduler");
+    if (scheduler) {
+      data.scheduler = scheduler;
     }
         const steps = parseInt(this.config.get("api.image.steps"), 10);
     if (Number.isFinite(steps)) {

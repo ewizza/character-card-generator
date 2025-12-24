@@ -381,7 +381,7 @@
             <div class="footer-left">
                 <div class="api-status" id="api-status">
                     <span class="status-indicator status-offline"></span>
-                    <span class="status-text">API Status: Checking...</span>
+                    <span class="status-text">API Status: Not checked</span>
                 </div>
             </div>
             <div class="footer-center">
@@ -390,6 +390,10 @@
                 </button>
             </div>
             <div class="footer-right">
+                <button id="image-settings-btn" class="btn-outline" style="font-size: 0.85rem">
+                    🖼️ Image Settings
+                </button>
+
                 <button id="api-settings-btn" class="btn-outline" style="font-size: 0.85rem">
                     ⚙️ API Settings
                 </button>
@@ -399,6 +403,7 @@
 
     <script src="src/scripts/config.js?v=20250120"></script>
     <script src="src/scripts/prompt-manager.js?v=20250120"></script>
+    <script src="src/scripts/comfy/applyBindings.js?v=20250120"></script>
     <script src="src/scripts/api.js?v=20250120"></script>
     <script src="src/scripts/character-generator.js?v=20250120"></script>
     <script src="src/scripts/image-generator.js?v=20250120"></script>
@@ -427,7 +432,8 @@
                     <input type="text" id="text-model" class="input" placeholder="e.g., glm-4.6" required />
                 </div>
 
-                <div class="form-group">
+                <div id="sdapi-api-settings">
+<div class="form-group">
                     <label for="image-api-base" class="label">Image API Base URL (optional)</label>
                     <input type="text" id="image-api-base" class="input"
                         placeholder="Your Image API Base URL (optional)" />
@@ -444,42 +450,34 @@
                     <input type="text" id="image-model" class="input"
                         placeholder="e.g., bytedance/seedream-4 (optional)" />
                 </div>
-
-                <div class="form-group">
-                    <label class="label">Image Size (optional)</label>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
-                        <div>
-                            <label for="image-width" class="label" style="font-size: 0.75rem;">Width</label>
-                            <input type="number" id="image-width" class="input" min="64" max="2048" step="64"
-                                placeholder="1024" />
-                        </div>
-                        <div>
-                            <label for="image-height" class="label" style="font-size: 0.75rem;">Height</label>
-                            <input type="number" id="image-height" class="input" min="64" max="2048" step="64"
-                                placeholder="1024" />
-                        </div>
-                    </div>
                 </div>
 
                 <div class="form-group">
-                    <label for="image-sampler" class="label">Sampler</label>
-                    <select id="image-sampler" class="input" style="height: 3rem;">
-                        <option value="Euler">Euler</option>
+                    <label for="image-provider" class="label">Image Provider</label>
+                    <select id="image-provider" class="input" style="height: 3rem;">
+                        <option value="sdapi">Kobold/SDAPI (A1111-compatible)</option>
+                        <option value="comfyui">ComfyUI</option>
                     </select>
+                    <p style="font-size: 0.75rem; color: #9ca3af; margin-top: 0.5rem;">
+                        💡 ComfyUI Phase 1 uses Basic workflows. Advanced workflow selection comes later.
+                    </p>
                 </div>
-                <div class="form-group">
-                    <label class="label">Image Quality</label>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
-                        <div>
-                        <label for="image-steps" class="label" style="font-size: 0.75rem;">Steps</label>
-                        <input type="number" id="image-steps" class="input"
-                            min="1" max="150" step="1" placeholder="28" />
-                        </div>
-                        <div>
-                        <label for="image-cfg-scale" class="label" style="font-size: 0.75rem;">CFG Scale</label>
-                        <input type="number" id="image-cfg-scale" class="input"
-                            min="1" max="30" step="0.5" placeholder="7" />
-                        </div>
+
+                <div id="comfyui-settings" style="display: none;">
+                    <div class="form-group">
+                        <label for="comfyui-base-url" class="label">ComfyUI Base URL</label>
+                        <input type="text" id="comfyui-base-url" class="input" placeholder="http://127.0.0.1:8188" />
+                    </div>
+
+                    <div class="form-group">
+                        <label for="comfyui-workflow-family" class="label">ComfyUI Workflow Family</label>
+                        <select id="comfyui-workflow-family" class="input" style="height: 3rem;">
+                            <option value="sd_basic">SD (Checkpoint)</option>
+                            <option value="flux_basic">FLUX</option>
+                        </select>
+                        <p style="font-size: 0.75rem; color: #9ca3af; margin-top: 0.5rem;">
+                            💡 Phase 1 supports Basic workflow families. Advanced selection comes later.
+                        </p>
                     </div>
                 </div>
 
@@ -617,7 +615,127 @@
         </div>
     </div>
 
-    <script src="src/scripts/main.js?v=20250120"></script>
+    <!-- Image Settings Modal -->
+    <div id="image-settings-modal" class="modal-overlay">
+        <div class="api-settings-modal">
+            <div class="modal-header">
+                <h2 class="modal-title">🖼️ Image Settings</h2>
+                <button id="image-modal-close-btn" class="modal-close">×</button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 0;">
+                    These settings apply to image generation. Options change based on the selected Image Provider.
+                </p>
+
+                <div class="form-group">
+                    <label class="label">Image Size</label>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+                        <div>
+                            <label for="image-width" class="label" style="font-size: 0.75rem;">Width</label>
+                            <input type="number" id="image-width" class="input" min="64" max="2048" step="64" placeholder="1024" />
+                        </div>
+                        <div>
+                            <label for="image-height" class="label" style="font-size: 0.75rem;">Height</label>
+                            <input type="number" id="image-height" class="input" min="64" max="2048" step="64" placeholder="1024" />
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="label">Image Quality</label>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+                        <div>
+                            <label for="image-steps" class="label" style="font-size: 0.75rem;">Steps</label>
+                            <input type="number" id="image-steps" class="input" min="1" max="150" step="1" placeholder="28" />
+                        </div>
+                        <div>
+                            <label for="image-cfg-scale" class="label" style="font-size: 0.75rem;">CFG Scale</label>
+                            <input type="number" id="image-cfg-scale" class="input" min="1" max="30" step="0.5" placeholder="7" />
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SDAPI-only controls -->
+                <div id="image-settings-sdapi" style="display: none;">
+                    <div class="form-group">
+                        <label for="image-sampler" class="label">Sampler</label>
+                        <select id="image-sampler" class="input" style="height: 3rem;">
+                            <option value="Euler">Euler</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="image-scheduler" class="label">Scheduler</label>
+                        <select id="image-scheduler" class="input" style="height: 3rem;">
+                            <option value="">(default)</option>
+                            <option value="normal">normal</option>
+                            <option value="karras">karras</option>
+                            <option value="exponential">exponential</option>
+                            <option value="simple">simple</option>
+                            <option value="sgm_uniform">sgm_uniform</option>
+                            <option value="ddim_uniform">ddim_uniform</option>
+                        </select>
+                        <p style="font-size: 0.75rem; color: #9ca3af; margin-top: 0.5rem;">
+                            💡 Some SDAPI backends ignore scheduler. If unsure, leave as (default).
+                        </p>
+                    </div>
+                </div>
+
+                <!-- ComfyUI-only controls -->
+                <div id="image-settings-comfyui" style="display: none;">
+                    <div class="form-group" id="comfyui-checkpoint-group" style="display: none;">
+                        <label for="comfyui-checkpoint" class="label">Checkpoint</label>
+                        <select id="comfyui-checkpoint" class="input" style="height: 3rem;">
+                            <option value="">(use workflow default)</option>
+                        </select>
+                        <p style="font-size: 0.75rem; color: #9ca3af; margin-top: 0.5rem;">
+                            📦 Loaded from ComfyUI <code>/models/checkpoints</code>.
+                        </p>
+                    </div>
+
+                    <div class="form-group" id="comfyui-sampler-group" style="display: none;">
+                        <label for="comfyui-sampler" class="label">Sampler</label>
+                        <select id="comfyui-sampler" class="input" style="height: 3rem;">
+                            <option value="">(use workflow default)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group" id="comfyui-scheduler-group" style="display: none;">
+                        <label for="comfyui-scheduler" class="label">Scheduler</label>
+                        <select id="comfyui-scheduler" class="input" style="height: 3rem;">
+                            <option value="">(use workflow default)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group" id="comfyui-lora-group" style="display: none;">
+                        <label for="comfyui-lora" class="label">LoRA</label>
+                        <select id="comfyui-lora" class="input" style="height: 3rem;">
+                            <option value="">(none)</option>
+                        </select>
+                        <p style="font-size: 0.75rem; color: #9ca3af; margin-top: 0.5rem;">
+                            📦 Loaded from ComfyUI <code>/models/loras</code>.
+                        </p>
+                    </div>
+
+                    <div class="form-group" id="comfyui-lora-strengths-group" style="display: none;">
+                        <label class="label">LoRA Strength</label>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+                            <div>
+                                <label for="comfyui-lora-strength-model" class="label" style="font-size: 0.75rem;">Model</label>
+                                <input type="number" id="comfyui-lora-strength-model" class="input" min="-5" max="5" step="0.05" value="1" />
+                            </div>
+                            <div>
+                                <label for="comfyui-lora-strength-clip" class="label" style="font-size: 0.75rem;">CLIP</label>
+                                <input type="number" id="comfyui-lora-strength-clip" class="input" min="-5" max="5" step="0.05" value="1" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<script src="src/scripts/main.js?v=20250120"></script>
 </body>
 
 </html>

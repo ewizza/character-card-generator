@@ -1,0 +1,8 @@
+{
+  "family": "flux_basic",
+  "template": "/workflows/comfy/flux_basic.api.json",
+  "disabled": true,
+  "note": "Replace flux_basic.api.json and this bindings file with an API-format workflow exported from your ComfyUI setup.",
+  "map": {},
+  "defaults": {}
+}

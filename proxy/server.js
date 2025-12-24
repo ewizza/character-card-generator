@@ -78,6 +78,14 @@ function buildSdSamplersUrl(apiUrl) {
   return `${base}/sdapi/v1/samplers`;
 }
 
+function buildComfyUrl(apiUrl, path) {
+  const base = normalizeBase(apiUrl);
+  if (!base) return "";
+  if (!path) return base;
+  if (path.startsWith("/")) return `${base}${path}`;
+  return `${base}/${path}`;
+}
+
 // Allow CORS from any origin in production (adjust for security as needed)
 const allowedOrigins = [
   "http://localhost:2427",
@@ -514,6 +522,346 @@ app.get("/api/image/samplers", async (req, res) => {
       error: {
         code: "500",
         message: "Internal server error in image sampler proxy",
+        details: error.message,
+      },
+    });
+  }
+});
+
+// -----------------------------
+// ComfyUI proxy endpoints
+// -----------------------------
+
+// Submit a workflow to ComfyUI's queue
+// Expects: headers: x-api-url (ComfyUI base, e.g. http://127.0.0.1:8188)
+// Body: { prompt: <workflow_api_json>, client_id?: string }
+app.post("/api/comfy/prompt", async (req, res) => {
+  try {
+    const apiUrl = req.headers["x-api-url"] || req.headers["x-comfy-url"];
+    if (!apiUrl) {
+      return res.status(400).json({
+        error: {
+          code: "400",
+          message: "ComfyUI Base URL required",
+          details: "Please configure your ComfyUI Base URL in the image settings",
+        },
+      });
+    }
+
+    const fullUrl = buildComfyUrl(apiUrl, "/prompt");
+    console.log("Proxying ComfyUI prompt submit to:", fullUrl);
+
+    const response = await fetch(fullUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(req.body || {}),
+    });
+
+    const text = await response.text();
+    if (!response.ok) {
+      console.error("ComfyUI /prompt error:", response.status, text);
+      return res.status(response.status).json({
+        error: {
+          code: response.status.toString(),
+          message: `ComfyUI Error: ${response.statusText}`,
+          details: text,
+        },
+      });
+    }
+
+    // ComfyUI returns JSON; parse from text to preserve useful error messages if parsing fails.
+    try {
+      return res.json(JSON.parse(text));
+    } catch (e) {
+      return res.status(502).json({
+        error: {
+          code: "502",
+          message: "Invalid JSON from ComfyUI /prompt",
+          details: text,
+        },
+      });
+    }
+  } catch (error) {
+    console.error("ComfyUI proxy /prompt error:", error);
+    return res.status(500).json({
+      error: {
+        code: "500",
+        message: "Internal server error in ComfyUI proxy (/prompt)",
+        details: error.message,
+      },
+    });
+  }
+});
+
+// Poll workflow completion/output
+app.get("/api/comfy/history/:promptId", async (req, res) => {
+  try {
+    const apiUrl = req.headers["x-api-url"] || req.headers["x-comfy-url"];
+    const promptId = req.params.promptId;
+
+    if (!apiUrl) {
+      return res.status(400).json({
+        error: {
+          code: "400",
+          message: "ComfyUI Base URL required",
+          details: "Please configure your ComfyUI Base URL in the image settings",
+        },
+      });
+    }
+    if (!promptId) {
+      return res.status(400).json({
+        error: {
+          code: "400",
+          message: "promptId required",
+          details: "Missing ComfyUI prompt id",
+        },
+      });
+    }
+
+    const fullUrl = buildComfyUrl(apiUrl, `/history/${encodeURIComponent(promptId)}`);
+    const response = await fetch(fullUrl, { method: "GET" });
+
+    const text = await response.text();
+    if (!response.ok) {
+      console.error("ComfyUI /history error:", response.status, text);
+      return res.status(response.status).json({
+        error: {
+          code: response.status.toString(),
+          message: `ComfyUI Error: ${response.statusText}`,
+          details: text,
+        },
+      });
+    }
+
+    try {
+      return res.json(JSON.parse(text));
+    } catch (e) {
+      return res.status(502).json({
+        error: {
+          code: "502",
+          message: "Invalid JSON from ComfyUI /history",
+          details: text,
+        },
+      });
+    }
+  } catch (error) {
+    console.error("ComfyUI proxy /history error:", error);
+    return res.status(500).json({
+      error: {
+        code: "500",
+        message: "Internal server error in ComfyUI proxy (/history)",
+        details: error.message,
+      },
+    });
+  }
+});
+
+
+// List available model folders (ComfyUI /models)
+app.get("/api/comfy/models", async (req, res) => {
+  try {
+    const apiUrl = req.headers["x-api-url"] || req.headers["x-comfy-url"];
+    if (!apiUrl) {
+      return res.status(400).json({
+        error: {
+          code: "400",
+          message: "ComfyUI Base URL required",
+          details: "Please configure your ComfyUI Base URL in the image settings",
+        },
+      });
+    }
+
+    const fullUrl = buildComfyUrl(apiUrl, "/models");
+    const response = await fetch(fullUrl, { method: "GET" });
+    const text = await response.text();
+
+    if (!response.ok) {
+      return res.status(response.status).json({
+        error: {
+          code: response.status.toString(),
+          message: `ComfyUI Error: ${response.statusText}`,
+          details: text,
+        },
+      });
+    }
+
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.type("application/json").send(text);
+  } catch (error) {
+    console.error("ComfyUI /models proxy error:", error);
+    res.status(500).json({
+      error: {
+        code: "500",
+        message: "Internal server error in ComfyUI models proxy",
+        details: error.message,
+      },
+    });
+  }
+});
+
+// List models in a folder (ComfyUI /models/<folder>), e.g. checkpoints, vae, loras
+app.get("/api/comfy/models/:folder", async (req, res) => {
+  try {
+    const apiUrl = req.headers["x-api-url"] || req.headers["x-comfy-url"];
+    if (!apiUrl) {
+      return res.status(400).json({
+        error: {
+          code: "400",
+          message: "ComfyUI Base URL required",
+          details: "Please configure your ComfyUI Base URL in the image settings",
+        },
+      });
+    }
+
+    const folder = req.params.folder;
+    const fullUrl = buildComfyUrl(apiUrl, `/models/${encodeURIComponent(folder)}`);
+    const response = await fetch(fullUrl, { method: "GET" });
+    const text = await response.text();
+
+    if (!response.ok) {
+      return res.status(response.status).json({
+        error: {
+          code: response.status.toString(),
+          message: `ComfyUI Error: ${response.statusText}`,
+          details: text,
+        },
+      });
+    }
+
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.type("application/json").send(text);
+  } catch (error) {
+    console.error("ComfyUI /models/:folder proxy error:", error);
+    res.status(500).json({
+      error: {
+        code: "500",
+        message: "Internal server error in ComfyUI models folder proxy",
+        details: error.message,
+      },
+    });
+  }
+});
+
+
+// -----------------------------
+// ComfyUI object_info passthrough (for sampler/scheduler lists, etc.)
+// -----------------------------
+app.get("/api/comfy/object_info", async (req, res) => {
+  try {
+    const apiUrl = req.headers["x-api-url"] || req.headers["x-comfy-url"];
+    if (!apiUrl) {
+      return res.status(400).json({
+        error: {
+          code: "400",
+          message: "ComfyUI Base URL required",
+          details: "Please configure your ComfyUI Base URL in the image settings",
+        },
+      });
+    }
+
+    const fullUrl = buildComfyUrl(apiUrl, "/object_info");
+    const response = await fetch(fullUrl, { method: "GET" });
+    const text = await response.text();
+
+    if (!response.ok) {
+      return res.status(response.status).json({
+        error: {
+          code: response.status.toString(),
+          message: `ComfyUI Error: ${response.statusText}`,
+          details: text,
+        },
+      });
+    }
+
+    let json;
+    try {
+      json = JSON.parse(text);
+    } catch {
+      return res.type("application/json").send(text);
+    }
+
+    // Optional filter: /api/comfy/object_info?class=KSampler
+    const cls = (req.query.class || "").toString().trim();
+    if (cls) {
+      if (json && Object.prototype.hasOwnProperty.call(json, cls)) {
+        return res.json(json[cls]);
+      }
+      return res.status(404).json({
+        error: {
+          code: "404",
+          message: "Class not found in object_info",
+          details: cls,
+        },
+      });
+    }
+
+    return res.json(json);
+  } catch (error) {
+    console.error("ComfyUI /object_info proxy error:", error);
+    res.status(500).json({
+      error: {
+        code: "500",
+        message: "Internal server error in ComfyUI object_info proxy",
+        details: error.message,
+      },
+    });
+  }
+});
+
+// Fetch an output image by filename/subfolder/type
+// Mirrors ComfyUI: GET /view?filename=...&subfolder=...&type=output
+app.get("/api/comfy/view", async (req, res) => {
+  try {
+    const apiUrl = req.headers["x-api-url"] || req.headers["x-comfy-url"];
+    if (!apiUrl) {
+      return res.status(400).json({
+        error: {
+          code: "400",
+          message: "ComfyUI Base URL required",
+          details: "Please configure your ComfyUI Base URL in the image settings",
+        },
+      });
+    }
+
+    const qs = new URLSearchParams();
+    for (const [k, v] of Object.entries(req.query || {})) {
+      if (v === undefined || v === null) continue;
+      // Express may pass arrays; support both.
+      if (Array.isArray(v)) {
+        v.forEach((vv) => qs.append(k, String(vv)));
+      } else {
+        qs.set(k, String(v));
+      }
+    }
+
+    const fullUrl = buildComfyUrl(apiUrl, `/view?${qs.toString()}`);
+    console.log("Proxying ComfyUI view to:", fullUrl);
+
+    const response = await fetch(fullUrl, { method: "GET" });
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("ComfyUI /view error:", response.status, errorText);
+      return res.status(response.status).json({
+        error: {
+          code: response.status.toString(),
+          message: `ComfyUI Error: ${response.statusText}`,
+          details: errorText,
+        },
+      });
+    }
+
+    const contentType = response.headers.get("content-type") || "image/png";
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Access-Control-Allow-Origin", "*");
+
+    const buf = await response.buffer();
+    return res.send(buf);
+  } catch (error) {
+    console.error("ComfyUI proxy /view error:", error);
+    return res.status(500).json({
+      error: {
+        code: "500",
+        message: "Internal server error in ComfyUI proxy (/view)",
         details: error.message,
       },
     });
