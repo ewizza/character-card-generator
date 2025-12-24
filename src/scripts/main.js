@@ -31,6 +31,7 @@ class CharacterGeneratorApp {
     this.isGenerating = false;
 
     this.apiSettingsIsOpen = false;
+    this.imageSettingsIsOpen = false;
 
 
 
@@ -354,12 +355,8 @@ class CharacterGeneratorApp {
     // Save API settings on input change
 
     const apiInputs = document.querySelectorAll(
-
-      "#text-api-base, #text-api-key, #text-model, #image-api-base, #image-api-key, #image-model, #image-provider, #comfyui-base-url, #comfyui-workflow-family, #comfyui-checkpoint, #comfyui-sampler, #comfyui-scheduler, #comfyui-lora, #comfyui-lora-strength-model, #comfyui-lora-strength-clip, #image-width, #image-height, #image-sampler, #image-steps, #image-cfg-scale",
-
+      "#text-api-base, #text-api-key, #text-model, #image-provider, #image-api-base, #image-api-key, #image-model, #comfyui-base-url, #comfyui-workflow-family",
     );
-
-
 
     apiInputs.forEach((input) => {
 
@@ -368,71 +365,65 @@ class CharacterGeneratorApp {
     });
 
 
+    // Save Image settings on input change
+    const imageInputs = document.querySelectorAll(
+      "#image-width, #image-height, #image-steps, #image-cfg-scale, #image-sampler, #image-scheduler, #comfyui-checkpoint, #comfyui-sampler, #comfyui-scheduler, #comfyui-lora, #comfyui-lora-strength-model, #comfyui-lora-strength-clip",
+    );
 
-    // Image provider toggle (Phase 1 scaffolding for ComfyUI)
+    imageInputs.forEach((input) => {
+      input.addEventListener("change", () => this.saveImageSettings());
+    });
+
+    // Image provider toggle
 
     const imageProviderSelect = document.getElementById("image-provider");
-
+    const sdapiApiSettings = document.getElementById("sdapi-api-settings");
     const comfyuiSettings = document.getElementById("comfyui-settings");
 
     const updateImageProviderUI = () => {
+      const provider =
+        imageProviderSelect?.value ||
+        this.config.get("api.image.provider") ||
+        "sdapi";
 
-      const provider = imageProviderSelect?.value || "sdapi";
-
+      if (sdapiApiSettings) {
+        sdapiApiSettings.style.display = provider === "sdapi" ? "block" : "none";
+      }
       if (comfyuiSettings) {
-
         comfyuiSettings.style.display = provider === "comfyui" ? "block" : "none";
-
       }
 
-
-      this.loadComfyCheckpoints();
-    this.loadComfySamplerScheduler();
-    this.loadComfyLoras();
+      // Keep Image Settings modal in sync if it's open
+      if (this.imageSettingsIsOpen) {
+        this.updateImageSettingsUI();
+        this.refreshImageSettingsLists();
+      }
     };
 
     if (imageProviderSelect) {
-
       imageProviderSelect.addEventListener("change", () => {
-
         updateImageProviderUI();
-
-        this.loadComfyCheckpoints();
-    this.loadComfySamplerScheduler();
-    this.loadComfyLoras();
         this.saveAPISettings();
-
       });
 
       // Initial state
-
       updateImageProviderUI();
-
-      this.loadComfyCheckpoints();
-    this.loadComfySamplerScheduler();
-    this.loadComfyLoras();
-
     }
-
 
 
     // Refresh ComfyUI checkpoints when ComfyUI settings change
     const comfyuiWorkflowFamilyEl = document.getElementById("comfyui-workflow-family");
     if (comfyuiWorkflowFamilyEl) {
       comfyuiWorkflowFamilyEl.addEventListener("change", () => {
-        this.loadComfyCheckpoints();
-    this.loadComfySamplerScheduler();
-    this.loadComfyLoras();
         this.saveAPISettings();
+        if (this.imageSettingsIsOpen) this.refreshImageSettingsLists();
       });
     }
     const comfyuiBaseUrlEl = document.getElementById("comfyui-base-url");
     if (comfyuiBaseUrlEl) {
       comfyuiBaseUrlEl.addEventListener("change", () => {
-        this.loadComfyCheckpoints();
-    this.loadComfySamplerScheduler();
-    this.loadComfyLoras();
         this.saveAPISettings();
+        if (this.imageSettingsIsOpen) this.refreshImageSettingsLists();
       });
     }
 
@@ -543,21 +534,10 @@ class CharacterGeneratorApp {
       document.body.style.overflow = "hidden"; // Prevent background scrolling
       this.apiSettingsIsOpen = true;
 
-      // Only now do we attempt outbound API calls / dynamic lists.
+      this.config.saveToForm();
+      // Only now do we attempt outbound API calls (connection check).
       this.checkAPIStatus();
-
-      const provider =
-        document.getElementById("image-provider")?.value ||
-        this.config.get("api.image.provider") ||
-        "sdapi";
-
-      if (provider === "comfyui") {
-        this.loadComfyCheckpoints();
-        this.loadComfySamplerScheduler();
-        if (typeof this.loadComfyLoras === "function") this.loadComfyLoras();
-      } else {
-        this.loadImageSamplers();
-      }
+      if (typeof updateImageProviderUI === "function") updateImageProviderUI();
     });
 
 // Close modal function
@@ -601,6 +581,44 @@ class CharacterGeneratorApp {
       }
 
     });
+
+
+    const imageSettingsBtn = document.getElementById("image-settings-btn");
+    const imageModalOverlay = document.getElementById("image-settings-modal");
+    const imageModalCloseBtn = document.getElementById("image-modal-close-btn");
+
+    const openImageModal = () => {
+      if (!imageModalOverlay) return;
+      imageModalOverlay.classList.add("show");
+      document.body.style.overflow = "hidden";
+      this.imageSettingsIsOpen = true;
+
+      this.config.saveToForm();
+      this.updateImageSettingsUI();
+      this.refreshImageSettingsLists();
+    };
+
+    const closeImageModal = () => {
+      if (!imageModalOverlay) return;
+      imageModalOverlay.classList.remove("show");
+      document.body.style.overflow = "";
+      this.imageSettingsIsOpen = false;
+    };
+
+    if (imageSettingsBtn) imageSettingsBtn.addEventListener("click", openImageModal);
+    if (imageModalCloseBtn) imageModalCloseBtn.addEventListener("click", closeImageModal);
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && imageModalOverlay && imageModalOverlay.classList.contains("show")) {
+        closeImageModal();
+      }
+    });
+
+    if (imageModalOverlay) {
+      imageModalOverlay.addEventListener("click", (e) => {
+        if (e.target === imageModalOverlay) closeImageModal();
+      });
+    }
 
   }
 
@@ -652,11 +670,23 @@ class CharacterGeneratorApp {
     if (!this.apiSettingsIsOpen) return;
 
     this.checkAPIStatus();
+  }
 
+  saveImageSettings() {
+    this.config.loadFromForm();
+    this.config.saveConfig();
+    if (!this.imageSettingsIsOpen) return;
+    this.updateImageSettingsUI();
+  }
+
+  refreshImageSettingsLists() {
+    if (!this.imageSettingsIsOpen) return;
     const provider =
       document.getElementById("image-provider")?.value ||
       this.config.get("api.image.provider") ||
       "sdapi";
+
+    this.updateImageSettingsUI();
 
     if (provider === "comfyui") {
       this.loadComfyCheckpoints();
@@ -667,11 +697,47 @@ class CharacterGeneratorApp {
     }
   }
 
+  updateImageSettingsUI() {
+    const provider =
+      document.getElementById("image-provider")?.value ||
+      this.config.get("api.image.provider") ||
+      "sdapi";
+    const family =
+      document.getElementById("comfyui-workflow-family")?.value ||
+      this.config.get("api.image.comfyui.workflowFamily") ||
+      "sd_basic";
+
+    const sdSection = document.getElementById("image-settings-sdapi");
+    const comfySection = document.getElementById("image-settings-comfyui");
+    if (sdSection) sdSection.style.display = provider === "sdapi" ? "block" : "none";
+    if (comfySection) comfySection.style.display = provider === "comfyui" ? "block" : "none";
+
+    // SD-only controls are always visible inside sdSection.
+    // Comfy-only controls are generally SD workflow only (Phase 1).
+    const sdOnly = provider === "comfyui" && family === "sd_basic";
+    const ckptGroup = document.getElementById("comfyui-checkpoint-group");
+    const samplerGroup = document.getElementById("comfyui-sampler-group");
+    const schedGroup = document.getElementById("comfyui-scheduler-group");
+    const loraGroup = document.getElementById("comfyui-lora-group");
+    const strengthsGroup = document.getElementById("comfyui-lora-strengths-group");
+
+    if (ckptGroup) ckptGroup.style.display = sdOnly ? (ckptGroup.style.display === "none" ? "block" : ckptGroup.style.display) : "none";
+    if (samplerGroup) samplerGroup.style.display = sdOnly ? (samplerGroup.style.display === "none" ? "block" : samplerGroup.style.display) : "none";
+    if (schedGroup) schedGroup.style.display = sdOnly ? (schedGroup.style.display === "none" ? "block" : schedGroup.style.display) : "none";
+    if (loraGroup) loraGroup.style.display = sdOnly ? (loraGroup.style.display === "none" ? "block" : loraGroup.style.display) : "none";
+
+    const loraSel = document.getElementById("comfyui-lora");
+    if (strengthsGroup) {
+      const showStrengths = sdOnly && loraSel && loraSel.value;
+      strengthsGroup.style.display = showStrengths ? "block" : "none";
+    }
+  }
+
 
 
   async loadImageSamplers() {
 
-    if (!this.apiSettingsIsOpen) return;
+    if (!this.imageSettingsIsOpen) return;
 
     const samplerSelect = document.getElementById("image-sampler");
 
@@ -751,7 +817,7 @@ class CharacterGeneratorApp {
 
   async loadComfySamplerScheduler() {
 
-    if (!this.apiSettingsIsOpen) return;
+    if (!this.imageSettingsIsOpen) return;
     const provider = document.getElementById("image-provider")?.value || "sdapi";
     const family = document.getElementById("comfyui-workflow-family")?.value || "sd_basic";
 
@@ -831,7 +897,7 @@ class CharacterGeneratorApp {
   }
 
     async loadComfyLoras() {
-    if (!this.apiSettingsIsOpen) return;
+    if (!this.imageSettingsIsOpen) return;
     const provider = document.getElementById("image-provider")?.value || "sdapi";
     const family = document.getElementById("comfyui-workflow-family")?.value || "sd_basic";
 
@@ -928,165 +994,78 @@ class CharacterGeneratorApp {
   }
 
   async loadComfyCheckpoints() {
-
-    if (!this.apiSettingsIsOpen) return;
+    if (!this.imageSettingsIsOpen) return;
 
     const provider = document.getElementById("image-provider")?.value || "sdapi";
-
     const family = document.getElementById("comfyui-workflow-family")?.value || "sd_basic";
-
     const group = document.getElementById("comfyui-checkpoint-group");
-
     const select = document.getElementById("comfyui-checkpoint");
-
     if (!group || !select) return;
 
-
-
-    // Only show for ComfyUI + SD workflow
-
     const shouldShow = provider === "comfyui" && (family === "sd_basic" || family === "sd" || String(family).startsWith("sd"));
-
     group.style.display = shouldShow ? "block" : "none";
-
     if (!shouldShow) return;
 
-
-
-    const comfyBaseUrl = document.getElementById("comfyui-base-url")?.value?.trim() || this.config.get("api.image.comfyui.baseUrl");
-
-      const comfyuiBaseUrlEl = document.getElementById("comfyui-base-url");
-
-      if (comfyuiBaseUrlEl) {
-
-        comfyuiBaseUrlEl.addEventListener("change", () => {
-
-          this.loadComfyCheckpoints();
-    this.loadComfySamplerScheduler();
-    this.loadComfyLoras();
-
-        });
-
-      }
-
-
+    const comfyBaseUrl = (document.getElementById("comfyui-base-url")?.value || "").trim() ||
+      this.config.get("api.image.comfyui.baseUrl");
 
     if (!comfyBaseUrl) {
-
       select.innerHTML = '<option value="">Set ComfyUI Base URL to load checkpoints</option>';
-
       return;
-
     }
-
-
 
     const current = this.config.get("api.image.comfyui.ckptName") || "";
-
     select.innerHTML = '<option value="">Loading checkpoints…</option>';
 
-
-
     try {
-
       const resp = await fetch('/api/comfy/models/checkpoints', {
-
         method: 'GET',
-
         headers: { 'X-API-URL': comfyBaseUrl },
-
       });
-
       const text = await resp.text().catch(() => '');
-
-      if (!resp.ok) {
-
-        throw new Error(text || resp.statusText);
-
-      }
-
-
+      if (!resp.ok) throw new Error(text || resp.statusText);
 
       let data = null;
-
       try { data = JSON.parse(text); } catch { data = null; }
-
       let items = [];
-
       if (Array.isArray(data)) items = data;
-
       else if (data && Array.isArray(data.models)) items = data.models;
-
       else if (data && Array.isArray(data.checkpoints)) items = data.checkpoints;
 
-
-
       items = items.filter(Boolean).map(String);
-
-      items.sort((a,b) => a.localeCompare(b));
-
-
+      items.sort((a, b) => a.localeCompare(b));
 
       select.innerHTML = '';
-
       const optDefault = document.createElement('option');
-
       optDefault.value = '';
-
       optDefault.textContent = '(use workflow default)';
-
       select.appendChild(optDefault);
 
-
-
       for (const name of items) {
-
         const opt = document.createElement('option');
-
         opt.value = name;
-
         opt.textContent = name;
-
         select.appendChild(opt);
-
       }
-
-
-
-      // Restore selection (even if missing)
 
       if (current && !items.includes(current)) {
-
         const opt = document.createElement('option');
-
         opt.value = current;
-
         opt.textContent = `⚠ missing: ${current}`;
-
         select.appendChild(opt);
-
       }
 
-      select.value = current;
+      select.value = current || '';
 
     } catch (e) {
-
       console.warn('Failed to load ComfyUI checkpoints:', e);
-
       select.innerHTML = '';
-
       const opt = document.createElement('option');
-
       opt.value = '';
-
       opt.textContent = 'Failed to load checkpoints (see console)';
-
       select.appendChild(opt);
-
       select.value = '';
-
     }
-
   }
 
 

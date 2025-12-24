@@ -64,6 +64,7 @@ class Config {
           width: 1024,
           height: 1024,
           sampler: "Euler",
+          scheduler: "",
           steps: 28,
           cfgScale: 7,
           timeout: 60000,
@@ -153,6 +154,7 @@ class Config {
     const imageWidth = document.getElementById("image-width")?.value?.trim();
     const imageHeight = document.getElementById("image-height")?.value?.trim();
     const imageSampler = document.getElementById("image-sampler")?.value?.trim();
+    const imageScheduler = document.getElementById("image-scheduler")?.value?.trim();
     const imageSteps = document.getElementById("image-steps")?.value?.trim();
     const imageCfgScale = document.getElementById("image-cfg-scale")?.value?.trim();
 
@@ -186,6 +188,7 @@ class Config {
     }
 
     if (imageSampler !== undefined) this.config.api.image.sampler = imageSampler;
+    if (imageScheduler !== undefined) this.config.api.image.scheduler = imageScheduler;
 
     if (imageSteps !== undefined) {
       this.config.api.image.steps = this.normalizeSteps(
@@ -334,6 +337,8 @@ class Config {
         imageHeight.value = this.config.api.image.height || 1024;
       if (imageSampler)
         imageSampler.value = this.config.api.image.sampler || "Euler";
+      if (imageScheduler)
+        imageScheduler.value = this.config.api.image.scheduler || "";
 
       if (comfyuiBaseUrl)
         comfyuiBaseUrl.value = this.config.api.image.comfyui?.baseUrl || "";

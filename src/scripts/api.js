@@ -249,6 +249,22 @@ class APIHandler {
       values,
     );
 
+
+    // Optional LoRA injection for sd_basic (adds LoraLoader node and rewires model/clip)
+    const loraNameRaw = this.config.get("api.image.comfyui.loraName");
+    const loraName = loraNameRaw ? String(loraNameRaw).trim() : "";
+    const smRaw = this.config.get("api.image.comfyui.loraStrengthModel");
+    const scRaw = this.config.get("api.image.comfyui.loraStrengthClip");
+    const strengthModel = Number.isFinite(parseFloat(smRaw)) ? parseFloat(smRaw) : 1.0;
+    const strengthClip = Number.isFinite(parseFloat(scRaw)) ? parseFloat(scRaw) : 1.0;
+
+    let finalWorkflow = boundWorkflow;
+    if ((family || "sd_basic") === "sd_basic" && loraName) {
+      finalWorkflow = this.injectSdBasicLora(finalWorkflow, loraName, strengthModel, strengthClip);
+    }
+
+
+
     const submitResponse = await fetch("/api/comfy/prompt", {
       method: "POST",
       headers: {
@@ -256,7 +272,7 @@ class APIHandler {
         "X-API-URL": comfyBaseUrl,
       },
       body: JSON.stringify({
-        prompt: boundWorkflow,
+        prompt: finalWorkflow,
         client_id: this.comfyClientId,
       }),
     });
@@ -309,7 +325,43 @@ class APIHandler {
     const objectUrl = URL.createObjectURL(imgBlob);
     return objectUrl;
   }
-  async fetchComfyViewBlob(comfyBaseUrl, filename, subfolder = "", type = "output") {
+    injectSdBasicLora(workflow, loraName, strengthModel, strengthClip) {
+    if (!workflow || typeof workflow !== "object") return workflow;
+
+    // sd_basic expects: 3=KSampler, 4=CheckpointLoaderSimple, 6/7=CLIPTextEncode
+    const required = ["3", "4", "6", "7"];
+    for (const id of required) {
+      if (!workflow[id] || !workflow[id].inputs) {
+        throw new Error(`sd_basic workflow missing required node ${id} for LoRA injection`);
+      }
+    }
+
+    const numericIds = Object.keys(workflow)
+      .filter((k) => /^\d+$/.test(k))
+      .map((k) => parseInt(k, 10))
+      .filter((n) => Number.isFinite(n));
+    const nextId = String((numericIds.length ? Math.max(...numericIds) : 0) + 1);
+
+    workflow[nextId] = {
+      inputs: {
+        lora_name: String(loraName),
+        strength_model: Number.isFinite(strengthModel) ? strengthModel : 1.0,
+        strength_clip: Number.isFinite(strengthClip) ? strengthClip : 1.0,
+        model: ["4", 0],
+        clip: ["4", 1],
+      },
+      class_type: "LoraLoader",
+      _meta: { title: "Load LoRA" },
+    };
+
+    workflow["3"].inputs.model = [nextId, 0];
+    workflow["6"].inputs.clip = [nextId, 1];
+    workflow["7"].inputs.clip = [nextId, 1];
+
+    return workflow;
+  }
+
+async fetchComfyViewBlob(comfyBaseUrl, filename, subfolder = "", type = "output") {
     const qs = new URLSearchParams({
       filename: filename,
       subfolder: subfolder ?? "",
@@ -681,6 +733,10 @@ class APIHandler {
         ? "sampler_name"
         : "sampler";
       data[samplerKey] = sampler;
+    }
+    const scheduler = this.config.get("api.image.scheduler");
+    if (scheduler) {
+      data.scheduler = scheduler;
     }
         const steps = parseInt(this.config.get("api.image.steps"), 10);
     if (Number.isFinite(steps)) {

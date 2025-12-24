@@ -3,7 +3,7 @@
     "inputs": {
       "seed": 0,
       "steps": 30,
-      "cfg": 6,
+      "cfg": 7,
       "sampler_name": "euler",
       "scheduler": "simple",
       "denoise": 1,
@@ -31,7 +31,7 @@
   },
   "4": {
     "inputs": {
-      "ckpt_name": "SD15\\duchaitenGoldenlife_v10.safetensors"
+      "ckpt_name": "SDXL\\juggernautXL_ragnarokBy.safetensors"
     },
     "class_type": "CheckpointLoaderSimple",
     "_meta": {
@@ -40,8 +40,8 @@
   },
   "5": {
     "inputs": {
-      "width": 512,
-      "height": 512,
+      "width": 1024,
+      "height": 1024,
       "batch_size": 1
     },
     "class_type": "EmptyLatentImage",
